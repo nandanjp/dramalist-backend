@@ -1,0 +1,38 @@
+# ── Compiled binaries ─────────────────────────────────────────────────────────
+# */name targets the binary *inside* each service directory (e.g. auth-service/auth-service)
+# without ignoring the directory itself.
+*/auth-service
+*/user-service
+*/show-service
+*/review-service
+*/search-service
+*/ai-service
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# ── Test output ───────────────────────────────────────────────────────────────
+*.test
+*.out
+coverage.html
+
+# ── Go workspace sum (generated, not committed per-service) ───────────────────
+go.work.sum
+
+# ── Environment ───────────────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
