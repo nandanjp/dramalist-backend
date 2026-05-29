@@ -20,6 +20,8 @@ jobs:
                 service:
                     - ai-service
                     - auth-service
+                    - media-service
+                    - notification-service
                     - review-service
                     - search-service
                     - show-service
