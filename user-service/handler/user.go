@@ -18,14 +18,15 @@ var slugPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$`)
 // ── Response types ────────────────────────────────────────────────────────────
 
 type profileResponse struct {
-	ID          string               `json:"id"`
-	Email       string               `json:"email"`
-	DisplayName string               `json:"display_name"`
-	AvatarURL   *string              `json:"avatar_url"`
-	Bio         *string              `json:"bio"`
-	IsPublic    bool                 `json:"is_public"`
-	ProfileSlug *string              `json:"profile_slug"`
-	Preferences *preferencesResponse `json:"preferences,omitempty"`
+	ID          string  `json:"id"`
+	Email       string  `json:"email"`
+	DisplayName string  `json:"display_name"`
+	AvatarURL   *string `json:"avatar_url"`
+	Bio         *string `json:"bio"`
+	IsPublic    bool    `json:"is_public"`
+	ProfileSlug *string `json:"profile_slug"`
+	CreatedAt   string  `json:"created_at"`
+	UpdatedAt   string  `json:"updated_at"`
 }
 
 type preferencesResponse struct {
@@ -33,6 +34,12 @@ type preferencesResponse struct {
 	DefaultStatusFilter []string `json:"default_status_filter"`
 	DefaultGenreFilter  []string `json:"default_genre_filter"`
 	UITheme             string   `json:"ui_theme"`
+}
+
+type meResponse struct {
+	Profile     profileResponse      `json:"profile"`
+	Preferences *preferencesResponse `json:"preferences"`
+	WatchStats  any                  `json:"watch_stats"`
 }
 
 type statsResponse struct {
@@ -278,16 +285,19 @@ func (h *Handler) respondWithProfile(c *gin.Context, userID string) {
 
 	var p profileResponse
 	err := h.pool.QueryRow(ctx,
-		`SELECT id::text, email, display_name, avatar_url, bio, is_public, profile_slug
+		`SELECT id::text, email, display_name, avatar_url, bio, is_public, profile_slug,
+		        created_at::text, updated_at::text
 		 FROM profiles WHERE id = $1`,
 		userID,
-	).Scan(&p.ID, &p.Email, &p.DisplayName, &p.AvatarURL, &p.Bio, &p.IsPublic, &p.ProfileSlug)
+	).Scan(&p.ID, &p.Email, &p.DisplayName, &p.AvatarURL, &p.Bio, &p.IsPublic, &p.ProfileSlug,
+		&p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		errJSON(c, http.StatusInternalServerError, "profile fetch failed")
 		return
 	}
 
 	var prefs preferencesResponse
+	var prefsPtr *preferencesResponse
 	var statusFilter, genreFilter []string
 
 	err = h.pool.QueryRow(ctx,
@@ -307,8 +317,12 @@ func (h *Handler) respondWithProfile(c *gin.Context, userID string) {
 		}
 		prefs.DefaultStatusFilter = statusFilter
 		prefs.DefaultGenreFilter = genreFilter
-		p.Preferences = &prefs
+		prefsPtr = &prefs
 	}
 
-	c.JSON(http.StatusOK, p)
+	c.JSON(http.StatusOK, meResponse{
+		Profile:     p,
+		Preferences: prefsPtr,
+		WatchStats:  nil,
+	})
 }
