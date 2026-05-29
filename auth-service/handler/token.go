@@ -68,7 +68,7 @@ func (h *Handler) Logout(c *gin.Context) {
 		h.pool.Exec(c.Request.Context(),
 			"UPDATE refresh_tokens SET revoked = true WHERE token = $1", refreshToken)
 	}
-	c.SetCookie("drl_refresh", "", -1, "/auth/", "", h.cfg.IsProduction(), true)
+	c.SetCookie("drl_refresh", "", -1, "/", "", h.cfg.IsProduction(), true)
 	c.JSON(http.StatusOK, gin.H{"message": "logged out"})
 }
 
@@ -111,6 +111,6 @@ func (h *Handler) LogoutAll(c *gin.Context) {
 		userID,
 	)
 
-	c.SetCookie("drl_refresh", "", -1, "/auth/", "", h.cfg.IsProduction(), true)
+	c.SetCookie("drl_refresh", "", -1, "/", "", h.cfg.IsProduction(), true)
 	c.JSON(http.StatusOK, gin.H{"message": "all sessions revoked", "sessions_revoked": len(tokens)})
 }

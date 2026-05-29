@@ -103,7 +103,7 @@ func (h *Handler) setRefreshCookie(c *gin.Context, refreshToken string) {
 		"drl_refresh",
 		refreshToken,
 		h.cfg.RefreshTokenTTL,
-		"/auth/",
+		"/",
 		"",
 		h.cfg.IsProduction(), // Secure flag
 		true,                 // HttpOnly
