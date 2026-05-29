@@ -32,6 +32,8 @@ func (h *Handler) Register(r *gin.Engine) {
 	r.GET("/health", h.Health)
 
 	auth := r.Group("/auth")
+	auth.POST("/register", h.EmailRegister)
+	auth.POST("/login", h.EmailLogin)
 	auth.GET("/oauth/:provider", h.OAuthInitiate)
 	auth.GET("/oauth/:provider/callback", h.OAuthCallback)
 	auth.POST("/token/refresh", h.RefreshToken)
