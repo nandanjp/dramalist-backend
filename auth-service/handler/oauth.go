@@ -141,7 +141,7 @@ func (h *Handler) OAuthCallback(c *gin.Context) {
 	}
 
 	h.setRefreshCookie(c, pair.RefreshToken)
-	redirect(c, h.cfg.AppBaseURL+"/auth/callback?status=success")
+	redirect(c, h.cfg.AppBaseURL+"/auth/callback?token="+pair.AccessToken)
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────

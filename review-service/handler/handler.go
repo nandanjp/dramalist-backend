@@ -28,6 +28,7 @@ func (h *Handler) Register(r *gin.Engine) {
 	// Static sub-paths registered before /:id wildcard so Gin's radix tree
 	// routes them correctly (static nodes take priority over wildcard nodes).
 	reviews.GET("/me", h.ListMyReviews)
+	reviews.GET("/public/recent", h.RecentPublicReviews)
 	reviews.GET("/show/:showID", h.ListShowReviews)
 	reviews.GET("/aggregate/:showID", h.GetAggregate)
 

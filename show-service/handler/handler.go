@@ -27,7 +27,9 @@ func (h *Handler) Register(r *gin.Engine) {
 
 	shows := r.Group("/shows")
 
-	// Static sub-path must be registered before the :id wildcard.
+	// Static sub-paths registered before the :id wildcard.
+	shows.GET("/public/trending", h.TrendingShows)
+	shows.GET("/public/recent", h.RecentShows)
 	shows.GET("/users/:userID", h.ListPublicShows)
 
 	shows.GET("", h.ListShows)
