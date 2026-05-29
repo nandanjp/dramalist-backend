@@ -14,18 +14,17 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"dramalist/auth-service/config"
-	"dramalist/auth-service/keys"
 )
 
 type Handler struct {
-	cfg  *config.Config
-	pool *pgxpool.Pool
-	rdb  *redis.Client
-	kp   *keys.KeyPair
+	cfg       *config.Config
+	pool      *pgxpool.Pool
+	rdb       *redis.Client
+	jwtSecret []byte
 }
 
-func New(cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Client, kp *keys.KeyPair) *Handler {
-	return &Handler{cfg: cfg, pool: pool, rdb: rdb, kp: kp}
+func New(cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Client) *Handler {
+	return &Handler{cfg: cfg, pool: pool, rdb: rdb, jwtSecret: []byte(cfg.JWTSecret)}
 }
 
 func (h *Handler) Register(r *gin.Engine) {
@@ -69,8 +68,8 @@ func (h *Handler) issueTokenPair(ctx context.Context, user dbUser) (tokenPair, e
 		"iat":         time.Now().Unix(),
 		"exp":         time.Now().Add(time.Duration(h.cfg.AccessTokenTTL) * time.Second).Unix(),
 	}
-	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-	accessToken, err := token.SignedString(h.kp.Private)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	accessToken, err := token.SignedString(h.jwtSecret)
 	if err != nil {
 		return tokenPair{}, fmt.Errorf("sign JWT: %w", err)
 	}

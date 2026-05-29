@@ -16,7 +16,6 @@ import (
 	"dramalist/auth-service/config"
 	"dramalist/auth-service/db"
 	"dramalist/auth-service/handler"
-	"dramalist/auth-service/keys"
 )
 
 func main() {
@@ -39,17 +38,11 @@ func main() {
 	}
 	defer rdb.Close()
 
-	kp, err := keys.LoadOrGenerate(cfg.KeysDir)
-	if err != nil {
-		slog.Error("RSA key setup failed", "err", err)
-		os.Exit(1)
-	}
-
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(gin.Logger())
 
-	h := handler.New(cfg, pool, rdb, kp)
+	h := handler.New(cfg, pool, rdb)
 	h.Register(r)
 
 	srv := &http.Server{

@@ -33,7 +33,7 @@ type Config struct {
 
 	TOTPEncryptionKey string `env:"TOTP_ENCRYPTION_KEY,required"`
 
-	KeysDir string `env:"KEYS_DIR" envDefault:"/keys"`
+	JWTSecret string `env:"JWT_SECRET,required"`
 }
 
 func (c *Config) PostgresDSN() string {
