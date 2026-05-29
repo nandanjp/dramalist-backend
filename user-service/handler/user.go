@@ -320,9 +320,24 @@ func (h *Handler) respondWithProfile(c *gin.Context, userID string) {
 		prefsPtr = &prefs
 	}
 
+	var stats statsResponse
+	var statsPtr *statsResponse
+	var genreBytes []byte
+	statsErr := h.pool.QueryRow(ctx,
+		"SELECT total_watched, total_episodes, avg_rating, genre_breakdown FROM watch_stats WHERE user_id = $1",
+		userID,
+	).Scan(&stats.TotalWatched, &stats.TotalEpisodes, &stats.AvgRating, &genreBytes)
+	if statsErr == nil {
+		stats.GenreBreakdown = make(map[string]int)
+		json.Unmarshal(genreBytes, &stats.GenreBreakdown) //nolint:errcheck
+		statsPtr = &stats
+	} else if !errors.Is(statsErr, pgx.ErrNoRows) {
+		// non-fatal; log but continue
+	}
+
 	c.JSON(http.StatusOK, meResponse{
 		Profile:     p,
 		Preferences: prefsPtr,
-		WatchStats:  nil,
+		WatchStats:  statsPtr,
 	})
 }
