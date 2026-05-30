@@ -103,14 +103,14 @@ func (h *Handler) issueTokenPair(ctx context.Context, user dbUser) (tokenPair, e
 	return tokenPair{AccessToken: accessToken, RefreshToken: refreshToken}, nil
 }
 
-// setRefreshCookie writes the refresh token as an HttpOnly cookie scoped to /auth/.
+// setRefreshCookie writes the refresh token as an HttpOnly cookie.
 func (h *Handler) setRefreshCookie(c *gin.Context, refreshToken string) {
 	c.SetCookie(
 		"drl_refresh",
 		refreshToken,
 		h.cfg.RefreshTokenTTL,
 		"/",
-		"",
+		h.cfg.CookieDomain,
 		h.cfg.IsProduction(), // Secure flag
 		true,                 // HttpOnly
 	)

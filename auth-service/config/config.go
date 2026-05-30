@@ -28,6 +28,7 @@ type Config struct {
 	GithubRedirectURI  string `env:"GITHUB_REDIRECT_URI,required"`
 
 	AppBaseURL         string `env:"APP_BASE_URL" envDefault:"http://localhost:8080"`
+	CookieDomain       string `env:"COOKIE_DOMAIN" envDefault:""`
 	AccessTokenTTL     int    `env:"JWT_ACCESS_TOKEN_TTL" envDefault:"900"`
 	RefreshTokenTTL    int    `env:"JWT_REFRESH_TOKEN_TTL" envDefault:"2592000"`
 
