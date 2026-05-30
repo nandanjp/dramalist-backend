@@ -19,7 +19,7 @@ type ReviewEvent struct {
 	Event            string   `json:"event"`
 	ReviewID         string   `json:"review_id"`
 	UserID           string   `json:"user_id"`
-	ShowID           string   `json:"show_id"`
+	CatalogID        string   `json:"catalog_id"`
 	Rating           float64  `json:"rating"`
 	OldRating        *float64 `json:"old_rating,omitempty"` // set on review.updated so user-service can adjust running avg
 	ShowGenres       []string `json:"genres"`

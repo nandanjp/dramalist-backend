@@ -17,12 +17,6 @@ type searchResponse struct {
 }
 
 func (h *Handler) Search(c *gin.Context) {
-	userID := c.GetHeader("X-User-Id")
-	if userID == "" {
-		errJSON(c, http.StatusUnauthorized, "missing user identity")
-		return
-	}
-
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	if page < 1 {
 		page = 1
@@ -32,16 +26,20 @@ func (h *Handler) Search(c *gin.Context) {
 		limit = 20
 	}
 
-	mineOnly := c.Query("mine") == "true"
+	yearFrom, _ := strconv.Atoi(c.Query("year_from"))
+	yearTo, _ := strconv.Atoi(c.Query("year_to"))
 
 	params := elastic.SearchParams{
-		Query:    c.Query("q"),
-		UserID:   userID,
-		MineOnly: mineOnly,
-		Status:   c.Query("status"),
-		Genre:    c.Query("genre"),
-		Page:     page,
-		Limit:    limit,
+		Query:        c.Query("q"),
+		MediaType:    c.Query("media_type"),
+		Genre:        c.Query("genre"),
+		YearFrom:     yearFrom,
+		YearTo:       yearTo,
+		Country:      c.Query("country"),
+		Language:     c.Query("language"),
+		AiringStatus: c.Query("airing_status"),
+		Page:         page,
+		Limit:        limit,
 	}
 
 	results, total, err := h.es.Search(c.Request.Context(), params)

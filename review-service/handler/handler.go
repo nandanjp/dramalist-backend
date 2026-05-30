@@ -29,8 +29,8 @@ func (h *Handler) Register(r *gin.Engine) {
 	// routes them correctly (static nodes take priority over wildcard nodes).
 	reviews.GET("/me", h.ListMyReviews)
 	reviews.GET("/public/recent", h.RecentPublicReviews)
-	reviews.GET("/show/:showID", h.ListShowReviews)
-	reviews.GET("/aggregate/:showID", h.GetAggregate)
+	reviews.GET("/catalog/:catalogId", h.ListShowReviews)
+	reviews.GET("/aggregate/:catalogId", h.GetAggregate)
 
 	reviews.POST("", h.CreateReview)
 	reviews.GET("/:id", h.GetReview)

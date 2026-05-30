@@ -9,7 +9,7 @@ import (
 
 type publicReviewPreview struct {
 	ID             string    `json:"id"`
-	ShowID         string    `json:"show_id"`
+	CatalogID      string    `json:"catalog_id"`
 	UserID         string    `json:"user_id"`
 	Rating         float64   `json:"rating"`
 	ContentSnippet *string   `json:"content_snippet"`
@@ -23,7 +23,7 @@ func (h *Handler) RecentPublicReviews(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	rows, err := h.pool.Query(ctx,
-		`SELECT id::text, show_id::text, user_id::text, rating,
+		`SELECT id::text, catalog_id::text, user_id::text, rating,
 		        CASE WHEN content IS NOT NULL THEN LEFT(content, 200) ELSE NULL END,
 		        created_at
 		 FROM reviews
@@ -40,7 +40,7 @@ func (h *Handler) RecentPublicReviews(c *gin.Context) {
 	previews := make([]publicReviewPreview, 0, 20)
 	for rows.Next() {
 		var p publicReviewPreview
-		if err := rows.Scan(&p.ID, &p.ShowID, &p.UserID, &p.Rating, &p.ContentSnippet, &p.CreatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.CatalogID, &p.UserID, &p.Rating, &p.ContentSnippet, &p.CreatedAt); err != nil {
 			errJSON(c, http.StatusInternalServerError, "scan failed")
 			return
 		}

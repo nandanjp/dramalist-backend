@@ -49,6 +49,7 @@ type dbUser struct {
 	Email       string
 	DisplayName string
 	TOTPEnabled bool
+	IsAdmin     bool
 }
 
 // tokenPair is the result of a successful authentication.
@@ -61,10 +62,15 @@ type tokenPair struct {
 // token, persisting the refresh token in both Redis (fast lookup) and Postgres
 // (audit trail / "revoke all sessions" capability).
 func (h *Handler) issueTokenPair(ctx context.Context, user dbUser) (tokenPair, error) {
+	role := "user"
+	if user.IsAdmin {
+		role = "admin"
+	}
 	claims := jwt.MapClaims{
 		"userId":      user.ID,
 		"email":       user.Email,
 		"displayName": user.DisplayName,
+		"role":        role,
 		"iat":         time.Now().Unix(),
 		"exp":         time.Now().Add(time.Duration(h.cfg.AccessTokenTTL) * time.Second).Unix(),
 	}

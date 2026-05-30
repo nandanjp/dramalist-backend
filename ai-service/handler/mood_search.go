@@ -33,12 +33,6 @@ Rules:
 - If the user references a specific show (e.g. "like Signal"), interpret their taste, do not return the title itself`
 
 func (h *Handler) MoodSearch(c *gin.Context) {
-	userID := c.GetHeader("X-User-Id")
-	if userID == "" {
-		errJSON(c, http.StatusUnauthorized, "missing user identity")
-		return
-	}
-
 	var req moodSearchRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		errJSON(c, http.StatusBadRequest, "invalid request body")

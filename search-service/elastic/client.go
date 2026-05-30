@@ -14,30 +14,35 @@ import (
 	"dramalist/search-service/config"
 )
 
-const indexName = "shows"
+const indexName = "catalog"
 
-type ShowDoc struct {
-	ShowID        string   `json:"show_id"`
-	UserID        string   `json:"user_id"`
+type CatalogDoc struct {
+	CatalogID     string   `json:"catalog_id"`
+	MediaType     string   `json:"media_type"`
 	Title         string   `json:"title"`
 	OriginalTitle string   `json:"original_title,omitempty"`
+	Synopsis      string   `json:"synopsis,omitempty"`
 	Genre         []string `json:"genre"`
-	Status        string   `json:"status"`
-	Tags          []string `json:"tags"`
+	AiringStatus  string   `json:"airing_status"`
 	Year          *int     `json:"year,omitempty"`
-	IsPublic      bool     `json:"is_public"`
+	Country       string   `json:"country,omitempty"`
+	Language      string   `json:"language,omitempty"`
+	PosterURL     string   `json:"poster_url,omitempty"`
+	ActorNames    []string `json:"actor_names"`
 }
 
 type SearchResult struct {
-	ShowID        string   `json:"show_id"`
-	UserID        string   `json:"user_id"`
+	CatalogID     string   `json:"catalog_id"`
+	MediaType     string   `json:"media_type"`
 	Title         string   `json:"title"`
 	OriginalTitle string   `json:"original_title,omitempty"`
+	Synopsis      string   `json:"synopsis,omitempty"`
 	Genre         []string `json:"genre"`
-	Status        string   `json:"status"`
-	Tags          []string `json:"tags"`
+	AiringStatus  string   `json:"airing_status"`
 	Year          *int     `json:"year,omitempty"`
-	IsPublic      bool     `json:"is_public"`
+	Country       string   `json:"country,omitempty"`
+	Language      string   `json:"language,omitempty"`
+	PosterURL     string   `json:"poster_url,omitempty"`
 }
 
 type Client struct {
@@ -67,15 +72,18 @@ func (c *Client) EnsureIndex(ctx context.Context) error {
 	mapping := `{
 		"mappings": {
 			"properties": {
-				"show_id":        { "type": "keyword" },
-				"user_id":        { "type": "keyword" },
+				"catalog_id":     { "type": "keyword" },
+				"media_type":     { "type": "keyword" },
 				"title":          { "type": "text", "analyzer": "standard" },
 				"original_title": { "type": "text", "analyzer": "standard" },
+				"synopsis":       { "type": "text", "analyzer": "standard" },
 				"genre":          { "type": "keyword" },
-				"status":         { "type": "keyword" },
-				"tags":           { "type": "keyword" },
+				"airing_status":  { "type": "keyword" },
 				"year":           { "type": "integer" },
-				"is_public":      { "type": "boolean" }
+				"country":        { "type": "keyword" },
+				"language":       { "type": "keyword" },
+				"poster_url":     { "type": "keyword", "index": false },
+				"actor_names":    { "type": "keyword" }
 			}
 		}
 	}`
@@ -117,7 +125,7 @@ func (c *Client) CountDocuments(ctx context.Context) (int64, error) {
 	return r.Count, nil
 }
 
-func (c *Client) IndexShow(ctx context.Context, doc ShowDoc) error {
+func (c *Client) IndexCatalog(ctx context.Context, doc CatalogDoc) error {
 	payload, err := json.Marshal(doc)
 	if err != nil {
 		return err
@@ -125,45 +133,48 @@ func (c *Client) IndexShow(ctx context.Context, doc ShowDoc) error {
 
 	req := esapi.IndexRequest{
 		Index:      indexName,
-		DocumentID: doc.ShowID,
+		DocumentID: doc.CatalogID,
 		Body:       bytes.NewReader(payload),
 		Refresh:    "false",
 	}
 	res, err := req.Do(ctx, c.es)
 	if err != nil {
-		return fmt.Errorf("index show: %w", err)
+		return fmt.Errorf("index catalog: %w", err)
 	}
 	defer res.Body.Close()
 	if res.IsError() {
-		return fmt.Errorf("index show error: %s", res.String())
+		return fmt.Errorf("index catalog error: %s", res.String())
 	}
 	return nil
 }
 
-func (c *Client) DeleteShow(ctx context.Context, showID string) error {
+func (c *Client) DeleteCatalog(ctx context.Context, catalogID string) error {
 	req := esapi.DeleteRequest{
 		Index:      indexName,
-		DocumentID: showID,
+		DocumentID: catalogID,
 	}
 	res, err := req.Do(ctx, c.es)
 	if err != nil {
-		return fmt.Errorf("delete show: %w", err)
+		return fmt.Errorf("delete catalog: %w", err)
 	}
 	defer res.Body.Close()
 	if res.IsError() && res.StatusCode != 404 {
-		return fmt.Errorf("delete show error: %s", res.String())
+		return fmt.Errorf("delete catalog error: %s", res.String())
 	}
 	return nil
 }
 
 type SearchParams struct {
-	Query    string
-	UserID   string
-	MineOnly bool
-	Status   string
-	Genre    string
-	Page     int
-	Limit    int
+	Query        string
+	MediaType    string
+	Genre        string
+	YearFrom     int
+	YearTo       int
+	Country      string
+	Language     string
+	AiringStatus string
+	Page         int
+	Limit        int
 }
 
 func (c *Client) Search(ctx context.Context, p SearchParams) ([]SearchResult, int64, error) {
@@ -174,7 +185,7 @@ func (c *Client) Search(ctx context.Context, p SearchParams) ([]SearchResult, in
 		must = append(must, map[string]any{
 			"multi_match": map[string]any{
 				"query":     p.Query,
-				"fields":    []string{"title^3", "original_title^2", "tags", "genre"},
+				"fields":    []string{"title^3", "original_title^2", "synopsis", "genre", "actor_names"},
 				"fuzziness": "AUTO",
 				"type":      "best_fields",
 			},
@@ -183,26 +194,30 @@ func (c *Client) Search(ctx context.Context, p SearchParams) ([]SearchResult, in
 		must = append(must, map[string]any{"match_all": map[string]any{}})
 	}
 
-	// Visibility: mine (any) OR public.
-	if p.MineOnly {
-		filter = append(filter, map[string]any{"term": map[string]any{"user_id": p.UserID}})
-	} else {
-		filter = append(filter, map[string]any{
-			"bool": map[string]any{
-				"should": []map[string]any{
-					{"term": map[string]any{"user_id": p.UserID}},
-					{"term": map[string]any{"is_public": true}},
-				},
-				"minimum_should_match": 1,
-			},
-		})
-	}
-
-	if p.Status != "" {
-		filter = append(filter, map[string]any{"term": map[string]any{"status": p.Status}})
+	if p.MediaType != "" {
+		filter = append(filter, map[string]any{"term": map[string]any{"media_type": p.MediaType}})
 	}
 	if p.Genre != "" {
 		filter = append(filter, map[string]any{"term": map[string]any{"genre": p.Genre}})
+	}
+	if p.Country != "" {
+		filter = append(filter, map[string]any{"term": map[string]any{"country": p.Country}})
+	}
+	if p.Language != "" {
+		filter = append(filter, map[string]any{"term": map[string]any{"language": p.Language}})
+	}
+	if p.AiringStatus != "" {
+		filter = append(filter, map[string]any{"term": map[string]any{"airing_status": p.AiringStatus}})
+	}
+	if p.YearFrom > 0 || p.YearTo > 0 {
+		yearRange := map[string]any{}
+		if p.YearFrom > 0 {
+			yearRange["gte"] = p.YearFrom
+		}
+		if p.YearTo > 0 {
+			yearRange["lte"] = p.YearTo
+		}
+		filter = append(filter, map[string]any{"range": map[string]any{"year": yearRange}})
 	}
 
 	from := (p.Page - 1) * p.Limit
@@ -242,7 +257,7 @@ func (c *Client) Search(ctx context.Context, p SearchParams) ([]SearchResult, in
 				Value int64 `json:"value"`
 			} `json:"total"`
 			Hits []struct {
-				Source ShowDoc `json:"_source"`
+				Source CatalogDoc `json:"_source"`
 			} `json:"hits"`
 		} `json:"hits"`
 	}
@@ -253,15 +268,17 @@ func (c *Client) Search(ctx context.Context, p SearchParams) ([]SearchResult, in
 	results := make([]SearchResult, 0, len(raw.Hits.Hits))
 	for _, h := range raw.Hits.Hits {
 		results = append(results, SearchResult{
-			ShowID:        h.Source.ShowID,
-			UserID:        h.Source.UserID,
+			CatalogID:     h.Source.CatalogID,
+			MediaType:     h.Source.MediaType,
 			Title:         h.Source.Title,
 			OriginalTitle: h.Source.OriginalTitle,
+			Synopsis:      h.Source.Synopsis,
 			Genre:         h.Source.Genre,
-			Status:        h.Source.Status,
-			Tags:          h.Source.Tags,
+			AiringStatus:  h.Source.AiringStatus,
 			Year:          h.Source.Year,
-			IsPublic:      h.Source.IsPublic,
+			Country:       h.Source.Country,
+			Language:      h.Source.Language,
+			PosterURL:     h.Source.PosterURL,
 		})
 	}
 	return results, raw.Hits.Total.Value, nil

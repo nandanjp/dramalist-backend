@@ -12,16 +12,19 @@ import (
 	"dramalist/show-service/config"
 )
 
-type ShowEvent struct {
+type CatalogEvent struct {
 	Event         string   `json:"event"`
-	ShowID        string   `json:"show_id"`
-	UserID        string   `json:"user_id"`
+	CatalogID     string   `json:"catalog_id"`
+	MediaType     string   `json:"media_type"`
 	Title         string   `json:"title"`
 	OriginalTitle *string  `json:"original_title"`
 	Genre         []string `json:"genre"`
-	Status        string   `json:"status"`
-	Tags          []string `json:"tags"`
+	AiringStatus  string   `json:"airing_status"`
 	Year          *int     `json:"year"`
+	Country       *string  `json:"country"`
+	Language      *string  `json:"language"`
+	Synopsis      *string  `json:"synopsis"`
+	PosterURL     *string  `json:"poster_url"`
 	IsPublic      bool     `json:"is_public"`
 }
 
@@ -33,7 +36,7 @@ func NewProducer(cfg *config.Config) *Producer {
 	brokers := strings.Split(cfg.KafkaBootstrapServers, ",")
 	w := &kafkago.Writer{
 		Addr:         kafkago.TCP(brokers...),
-		Topic:        "show.events",
+		Topic:        "catalog.events",
 		Balancer:     &kafkago.LeastBytes{},
 		RequiredAcks: kafkago.RequireOne,
 		WriteTimeout: 5 * time.Second,
@@ -45,7 +48,7 @@ func (p *Producer) Close() {
 	p.writer.Close()
 }
 
-func (p *Producer) Publish(ctx context.Context, evt ShowEvent) {
+func (p *Producer) Publish(ctx context.Context, evt CatalogEvent) {
 	payload, err := json.Marshal(evt)
 	if err != nil {
 		slog.Error("kafka marshal failed", "event", evt.Event, "err", err)

@@ -153,8 +153,8 @@ func (h *Handler) TOTPVerify(c *gin.Context) {
 	var encryptedSecret string
 	var user dbUser
 	if err := h.pool.QueryRow(ctx,
-		"SELECT id::text, email, display_name, totp_secret FROM users WHERE id = $1", userID,
-	).Scan(&user.ID, &user.Email, &user.DisplayName, &encryptedSecret); err != nil {
+		"SELECT id::text, email, display_name, is_admin, totp_secret FROM users WHERE id = $1", userID,
+	).Scan(&user.ID, &user.Email, &user.DisplayName, &user.IsAdmin, &encryptedSecret); err != nil {
 		errJSON(c, http.StatusUnauthorized, "user not found")
 		return
 	}

@@ -21,22 +21,41 @@ func New(cfg *config.Config, pool *pgxpool.Pool, producer *kafka.Producer) *Hand
 func (h *Handler) Register(r *gin.Engine) {
 	r.GET("/health", h.Health)
 
-	// Internal route — no nginx location for /internal/, so it is only reachable
-	// from within the Docker network. Used by search-service for cold-start backfill.
-	r.GET("/internal/shows/all", h.ExportAllShows)
+	// Internal backfill — no gateway location; reachable only within the cluster.
+	r.GET("/internal/catalog/all", h.ExportAllCatalog)
 
-	shows := r.Group("/shows")
+	// ── Catalog (public read, admin write) ─────────────────────────────────────
+	catalog := r.Group("/catalog")
+	catalog.GET("", h.ListCatalog)
+	catalog.POST("", h.CreateCatalogEntry)
+	catalog.GET("/:id", h.GetCatalogEntry)
+	catalog.PATCH("/:id", h.UpdateCatalogEntry)
+	catalog.DELETE("/:id", h.DeleteCatalogEntry)
 
-	// Static sub-paths registered before the :id wildcard.
-	shows.GET("/public/trending", h.TrendingShows)
-	shows.GET("/public/recent", h.RecentShows)
-	shows.GET("/users/:userID", h.ListPublicShows)
+	catalog.GET("/:id/cast", h.GetCast)
+	catalog.POST("/:id/cast", h.AddCastMember)
+	catalog.PATCH("/:id/cast/:castId", h.UpdateCastMember)
+	catalog.DELETE("/:id/cast/:castId", h.RemoveCastMember)
 
-	shows.GET("", h.ListShows)
-	shows.POST("", h.CreateShow)
-	shows.GET("/:id", h.GetShow)
-	shows.PATCH("/:id", h.UpdateShow)
-	shows.DELETE("/:id", h.DeleteShow)
+	// ── User list (authenticated) ──────────────────────────────────────────────
+	list := r.Group("/list")
+	list.GET("/users/:userID", h.ListPublicEntries)
+	list.GET("", h.ListEntries)
+	list.POST("", h.CreateListEntry)
+	list.GET("/:id", h.GetListEntry)
+	list.PATCH("/:id", h.UpdateListEntry)
+	list.DELETE("/:id", h.DeleteListEntry)
+
+	// ── Actors (public read, admin write) ──────────────────────────────────────
+	actors := r.Group("/actors")
+	actors.GET("", h.SearchActors)
+	actors.POST("", h.CreateActor)
+	actors.GET("/:id", h.GetActorProfile)
+	actors.PATCH("/:id", h.UpdateActor)
+
+	// ── Discovery (public) ─────────────────────────────────────────────────────
+	r.GET("/shows/public/trending", h.TrendingShows)
+	r.GET("/shows/public/recent", h.RecentShows)
 }
 
 func errJSON(c *gin.Context, status int, msg string) {

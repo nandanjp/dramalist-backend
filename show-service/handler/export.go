@@ -6,31 +6,32 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ExportShow is the shape returned by the internal export endpoint.
+// ExportCatalogEntry is the shape returned by the internal export endpoint.
 // It mirrors the fields search-service indexes into Elasticsearch.
-type ExportShow struct {
-	ShowID        string   `json:"show_id"`
-	UserID        string   `json:"user_id"`
+type ExportCatalogEntry struct {
+	CatalogID     string   `json:"catalog_id"`
+	MediaType     string   `json:"media_type"`
 	Title         string   `json:"title"`
 	OriginalTitle *string  `json:"original_title"`
+	Synopsis      *string  `json:"synopsis"`
 	Genre         []string `json:"genre"`
-	Status        string   `json:"status"`
-	Tags          []string `json:"tags"`
+	AiringStatus  string   `json:"airing_status"`
 	Year          *int     `json:"year"`
-	IsPublic      bool     `json:"is_public"`
+	Country       *string  `json:"country"`
+	Language      *string  `json:"language"`
+	PosterURL     *string  `json:"poster_url"`
 }
 
-// ExportAllShows streams all shows as a JSON array.
-// Route: GET /internal/shows/all
-// This route has no gateway nginx location — it is reachable only from within
-// the Docker network. search-service calls it on cold start to backfill ES.
-func (h *Handler) ExportAllShows(c *gin.Context) {
+// ExportAllCatalog streams all catalog entries as a JSON array.
+// Route: GET /internal/catalog/all
+// Reachable only from within the cluster. Used by search-service for cold-start backfill.
+func (h *Handler) ExportAllCatalog(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	rows, err := h.pool.Query(ctx,
-		`SELECT id::text, user_id::text, title, original_title, genre,
-		        status, tags, year, is_public
-		 FROM shows`,
+		`SELECT id::text, media_type, title, original_title, synopsis,
+		        genre, airing_status, year, country, language, poster_url
+		 FROM catalog`,
 	)
 	if err != nil {
 		errJSON(c, http.StatusInternalServerError, "export failed")
@@ -38,23 +39,20 @@ func (h *Handler) ExportAllShows(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	shows := make([]ExportShow, 0)
+	entries := make([]ExportCatalogEntry, 0)
 	for rows.Next() {
-		var s ExportShow
+		var e ExportCatalogEntry
 		if err := rows.Scan(
-			&s.ShowID, &s.UserID, &s.Title, &s.OriginalTitle, &s.Genre,
-			&s.Status, &s.Tags, &s.Year, &s.IsPublic,
+			&e.CatalogID, &e.MediaType, &e.Title, &e.OriginalTitle, &e.Synopsis,
+			&e.Genre, &e.AiringStatus, &e.Year, &e.Country, &e.Language, &e.PosterURL,
 		); err != nil {
 			errJSON(c, http.StatusInternalServerError, "scan failed")
 			return
 		}
-		if s.Genre == nil {
-			s.Genre = []string{}
+		if e.Genre == nil {
+			e.Genre = []string{}
 		}
-		if s.Tags == nil {
-			s.Tags = []string{}
-		}
-		shows = append(shows, s)
+		entries = append(entries, e)
 	}
-	c.JSON(http.StatusOK, shows)
+	c.JSON(http.StatusOK, entries)
 }

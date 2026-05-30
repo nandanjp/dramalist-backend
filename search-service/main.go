@@ -86,12 +86,12 @@ func main() {
 	srv.Shutdown(shutdownCtx)
 }
 
-// backfill fetches all shows from show-service and indexes them into ES.
+// backfill fetches all catalog entries from show-service and indexes them into ES.
 // Runs in a background goroutine so the HTTP server starts immediately.
 func backfill(ctx context.Context, es *elastic.Client, showServiceURL string) {
 	slog.Info("starting ES backfill from show-service")
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, showServiceURL+"/internal/shows/all", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, showServiceURL+"/internal/catalog/all", nil)
 	if err != nil {
 		slog.Error("backfill: build request failed", "err", err)
 		return
@@ -109,22 +109,22 @@ func backfill(ctx context.Context, es *elastic.Client, showServiceURL string) {
 		return
 	}
 
-	var shows []elastic.ShowDoc
-	if err := json.NewDecoder(resp.Body).Decode(&shows); err != nil {
+	var entries []elastic.CatalogDoc
+	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
 		slog.Error("backfill: decode failed", "err", err)
 		return
 	}
 
 	indexed := 0
-	for _, doc := range shows {
+	for _, doc := range entries {
 		if ctx.Err() != nil {
 			break
 		}
-		if err := es.IndexShow(ctx, doc); err != nil {
-			slog.Error("backfill: index failed", "show_id", doc.ShowID, "err", err)
+		if err := es.IndexCatalog(ctx, doc); err != nil {
+			slog.Error("backfill: index failed", "catalog_id", doc.CatalogID, "err", err)
 			continue
 		}
 		indexed++
 	}
-	slog.Info("ES backfill complete", "indexed", indexed, "total", len(shows))
+	slog.Info("ES backfill complete", "indexed", indexed, "total", len(entries))
 }

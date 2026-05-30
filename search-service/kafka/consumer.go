@@ -13,17 +13,19 @@ import (
 	"dramalist/search-service/elastic"
 )
 
-type ShowEvent struct {
+type CatalogEvent struct {
 	Event         string   `json:"event"`
-	ShowID        string   `json:"show_id"`
-	UserID        string   `json:"user_id"`
+	CatalogID     string   `json:"catalog_id"`
+	MediaType     string   `json:"media_type"`
 	Title         string   `json:"title"`
 	OriginalTitle *string  `json:"original_title"`
+	Synopsis      *string  `json:"synopsis"`
 	Genre         []string `json:"genre"`
-	Status        string   `json:"status"`
-	Tags          []string `json:"tags"`
+	AiringStatus  string   `json:"airing_status"`
 	Year          *int     `json:"year"`
-	IsPublic      bool     `json:"is_public"`
+	Country       *string  `json:"country"`
+	Language      *string  `json:"language"`
+	PosterURL     *string  `json:"poster_url"`
 }
 
 type Consumer struct {
@@ -36,7 +38,7 @@ func NewConsumer(cfg *config.Config, es *elastic.Client) *Consumer {
 	r := kafkago.NewReader(kafkago.ReaderConfig{
 		Brokers:        brokers,
 		GroupID:        cfg.KafkaGroupID,
-		Topic:          "show.events",
+		Topic:          "catalog.events",
 		MinBytes:       1,
 		MaxBytes:       10e6,
 		MaxWait:        time.Second,
@@ -50,7 +52,7 @@ func (c *Consumer) Close() {
 }
 
 func (c *Consumer) Run(ctx context.Context) {
-	slog.Info("kafka consumer started", "topic", "show.events")
+	slog.Info("kafka consumer started", "topic", "catalog.events")
 	for {
 		msg, err := c.reader.ReadMessage(ctx)
 		if err != nil {
@@ -61,55 +63,63 @@ func (c *Consumer) Run(ctx context.Context) {
 			continue
 		}
 
-		var evt ShowEvent
+		var evt CatalogEvent
 		if err := json.Unmarshal(msg.Value, &evt); err != nil {
 			slog.Error("kafka unmarshal failed", "err", err)
 			continue
 		}
 
 		switch evt.Event {
-		case "show.created", "show.updated":
+		case "catalog.created", "catalog.updated":
 			c.handleUpsert(ctx, evt)
-		case "show.deleted":
+		case "catalog.deleted":
 			c.handleDelete(ctx, evt)
 		default:
-			slog.Warn("unknown show event", "event", evt.Event)
+			slog.Warn("unknown catalog event", "event", evt.Event)
 		}
 	}
 }
 
-func (c *Consumer) handleUpsert(ctx context.Context, evt ShowEvent) {
-	doc := elastic.ShowDoc{
-		ShowID:   evt.ShowID,
-		UserID:   evt.UserID,
-		Title:    evt.Title,
-		Genre:    evt.Genre,
-		Status:   evt.Status,
-		Tags:     evt.Tags,
-		Year:     evt.Year,
-		IsPublic: evt.IsPublic,
+func (c *Consumer) handleUpsert(ctx context.Context, evt CatalogEvent) {
+	doc := elastic.CatalogDoc{
+		CatalogID:    evt.CatalogID,
+		MediaType:    evt.MediaType,
+		Title:        evt.Title,
+		AiringStatus: evt.AiringStatus,
+		Year:         evt.Year,
+		Genre:        evt.Genre,
+		ActorNames:   []string{},
 	}
 	if evt.OriginalTitle != nil {
 		doc.OriginalTitle = *evt.OriginalTitle
 	}
+	if evt.Synopsis != nil {
+		doc.Synopsis = *evt.Synopsis
+	}
+	if evt.Country != nil {
+		doc.Country = *evt.Country
+	}
+	if evt.Language != nil {
+		doc.Language = *evt.Language
+	}
+	if evt.PosterURL != nil {
+		doc.PosterURL = *evt.PosterURL
+	}
 	if doc.Genre == nil {
 		doc.Genre = []string{}
 	}
-	if doc.Tags == nil {
-		doc.Tags = []string{}
-	}
 
-	if err := c.es.IndexShow(ctx, doc); err != nil {
-		slog.Error("elasticsearch index failed", "show_id", evt.ShowID, "err", err)
+	if err := c.es.IndexCatalog(ctx, doc); err != nil {
+		slog.Error("elasticsearch index failed", "catalog_id", evt.CatalogID, "err", err)
 		return
 	}
-	slog.Info("show indexed", "show_id", evt.ShowID, "event", evt.Event)
+	slog.Info("catalog indexed", "catalog_id", evt.CatalogID, "event", evt.Event)
 }
 
-func (c *Consumer) handleDelete(ctx context.Context, evt ShowEvent) {
-	if err := c.es.DeleteShow(ctx, evt.ShowID); err != nil {
-		slog.Error("elasticsearch delete failed", "show_id", evt.ShowID, "err", err)
+func (c *Consumer) handleDelete(ctx context.Context, evt CatalogEvent) {
+	if err := c.es.DeleteCatalog(ctx, evt.CatalogID); err != nil {
+		slog.Error("elasticsearch delete failed", "catalog_id", evt.CatalogID, "err", err)
 		return
 	}
-	slog.Info("show deleted from index", "show_id", evt.ShowID)
+	slog.Info("catalog deleted from index", "catalog_id", evt.CatalogID)
 }

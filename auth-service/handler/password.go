@@ -81,10 +81,10 @@ func (h *Handler) EmailLogin(c *gin.Context) {
 	var user dbUser
 	var hash string
 	if err := h.pool.QueryRow(ctx,
-		`SELECT id::text, email, display_name, totp_enabled, COALESCE(password_hash, '')
+		`SELECT id::text, email, display_name, totp_enabled, is_admin, COALESCE(password_hash, '')
 		 FROM users WHERE email = $1`,
 		req.Email,
-	).Scan(&user.ID, &user.Email, &user.DisplayName, &user.TOTPEnabled, &hash); err != nil || hash == "" {
+	).Scan(&user.ID, &user.Email, &user.DisplayName, &user.TOTPEnabled, &user.IsAdmin, &hash); err != nil || hash == "" {
 		errJSON(c, http.StatusUnauthorized, "invalid email or password")
 		return
 	}

@@ -6,36 +6,24 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const discoverShowSQL = `
-	SELECT id::text, user_id::text, title, original_title, genre,
-	       status, episode_count, episodes_watched, year, country, language,
-	       notes, tags, is_public, started_at, completed_at, created_at, updated_at
-	FROM shows
-	WHERE is_public = true
-	ORDER BY %s
-	LIMIT $1`
-
-// TrendingShows returns the 12 most recently updated public shows.
+// TrendingShows returns the 12 catalog entries most recently added to any user's list.
 // GET /shows/public/trending
 func (h *Handler) TrendingShows(c *gin.Context) {
-	h.discoverShows(c, "updated_at DESC", 12)
+	h.discoverCatalog(c, "updated_at DESC", 12)
 }
 
-// RecentShows returns the 20 most recently created public shows.
+// RecentShows returns the 20 most recently created catalog entries.
 // GET /shows/public/recent
 func (h *Handler) RecentShows(c *gin.Context) {
-	h.discoverShows(c, "created_at DESC", 20)
+	h.discoverCatalog(c, "created_at DESC", 20)
 }
 
-func (h *Handler) discoverShows(c *gin.Context, orderBy string, limit int) {
+func (h *Handler) discoverCatalog(c *gin.Context, orderBy string, limit int) {
 	ctx := c.Request.Context()
 
+	// Safe: orderBy is a hardcoded internal string, never user-supplied.
 	rows, err := h.pool.Query(ctx,
-		// Safe: orderBy is a hardcoded internal string, never user-supplied.
-		"SELECT id::text, user_id::text, title, original_title, genre, "+
-			"status, episode_count, episodes_watched, year, country, language, "+
-			"notes, tags, is_public, started_at, completed_at, created_at, updated_at "+
-			"FROM shows WHERE is_public = true ORDER BY "+orderBy+" LIMIT $1",
+		"SELECT "+catalogSelectCols+" FROM catalog ORDER BY "+orderBy+" LIMIT $1",
 		limit,
 	)
 	if err != nil {
@@ -44,14 +32,14 @@ func (h *Handler) discoverShows(c *gin.Context, orderBy string, limit int) {
 	}
 	defer rows.Close()
 
-	shows := make([]showResponse, 0, limit)
+	entries := make([]catalogResponse, 0, limit)
 	for rows.Next() {
-		s, err := scanShow(rows)
+		entry, err := scanCatalog(rows)
 		if err != nil {
 			errJSON(c, http.StatusInternalServerError, "scan failed")
 			return
 		}
-		shows = append(shows, s)
+		entries = append(entries, entry)
 	}
-	c.JSON(http.StatusOK, shows)
+	c.JSON(http.StatusOK, entries)
 }

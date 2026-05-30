@@ -328,8 +328,8 @@ func (h *Handler) upsertUser(ctx context.Context, providerName string, profile o
 
 	var user dbUser
 	err = h.pool.QueryRow(ctx,
-		"SELECT id::text, email, display_name, totp_enabled FROM users WHERE id = $1", userID,
-	).Scan(&user.ID, &user.Email, &user.DisplayName, &user.TOTPEnabled)
+		"SELECT id::text, email, display_name, totp_enabled, is_admin FROM users WHERE id = $1", userID,
+	).Scan(&user.ID, &user.Email, &user.DisplayName, &user.TOTPEnabled, &user.IsAdmin)
 	return user, err
 }
 
