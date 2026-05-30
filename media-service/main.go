@@ -11,10 +11,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"dramalist/media-service/config"
 	"dramalist/media-service/db"
 	"dramalist/media-service/handler"
+	"dramalist/media-service/middleware"
 	"dramalist/media-service/storage"
 )
 
@@ -37,9 +39,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
+	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
-	r.Use(gin.Logger())
+	m := middleware.NewMetrics("media_service")
+	r.Use(m.Handler())
+	r.Use(middleware.RequestLogger("media_service"))
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	h := handler.New(cfg, pool, store)
 	h.Register(r)

@@ -11,11 +11,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"dramalist/auth-service/cache"
 	"dramalist/auth-service/config"
 	"dramalist/auth-service/db"
 	"dramalist/auth-service/handler"
+	"dramalist/auth-service/middleware"
 )
 
 func main() {
@@ -38,9 +40,14 @@ func main() {
 	}
 	defer rdb.Close()
 
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
 	r := gin.New()
 	r.Use(gin.Recovery())
-	r.Use(gin.Logger())
+	m := middleware.NewMetrics("auth_service")
+	r.Use(m.Handler())
+	r.Use(middleware.RequestLogger("auth_service"))
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	h := handler.New(cfg, pool, rdb)
 	h.Register(r)

@@ -8,11 +8,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 )
 
 // ── Provider config ────────────────────────────────────────────────────────────
@@ -288,49 +290,77 @@ func (h *Handler) fetchGithubProfile(ctx context.Context, code string) (oauthPro
 }
 
 // upsertUser finds an existing user by OAuth account or email (for cross-provider
-// account linking), or creates a new user row.
+// account linking), or creates a new user row. Runs inside a transaction to prevent
+// partial state from concurrent logins.
 func (h *Handler) upsertUser(ctx context.Context, providerName string, profile oauthProfile) (dbUser, error) {
-	// Check for existing OAuth account link
+	tx, err := h.pool.Begin(ctx)
+	if err != nil {
+		return dbUser{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	// Check for existing OAuth account link.
 	var userID string
-	err := h.pool.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		"SELECT user_id::text FROM oauth_accounts WHERE provider = $1 AND provider_user_id = $2",
 		providerName, profile.ProviderUserID,
 	).Scan(&userID)
 
 	if err != nil {
-		// No existing OAuth link — find or create user by email
+		if err != pgx.ErrNoRows {
+			log.Printf("[auth] upsertUser: oauth_accounts lookup failed: %v", err)
+			return dbUser{}, fmt.Errorf("oauth lookup: %w", err)
+		}
+
+		// No existing OAuth link — find or create user by email.
 		var existingID string
-		scanErr := h.pool.QueryRow(ctx,
+		scanErr := tx.QueryRow(ctx,
 			"SELECT id::text FROM users WHERE email = $1", profile.Email,
 		).Scan(&existingID)
 
 		if scanErr != nil {
-			// New user
-			if err := h.pool.QueryRow(ctx,
+			if scanErr != pgx.ErrNoRows {
+				log.Printf("[auth] upsertUser: user email lookup failed: %v", scanErr)
+				return dbUser{}, fmt.Errorf("user email lookup: %w", scanErr)
+			}
+			// New user — create account.
+			avatarURL := profile.AvatarURL
+			if avatarURL == "" {
+				avatarURL = ""
+			}
+			if insertErr := tx.QueryRow(ctx,
 				"INSERT INTO users (email, display_name, avatar_url) VALUES ($1, $2, $3) RETURNING id::text",
-				profile.Email, profile.DisplayName, profile.AvatarURL,
-			).Scan(&userID); err != nil {
-				return dbUser{}, fmt.Errorf("insert user: %w", err)
+				profile.Email, profile.DisplayName, avatarURL,
+			).Scan(&userID); insertErr != nil {
+				log.Printf("[auth] upsertUser: insert user failed: %v", insertErr)
+				return dbUser{}, fmt.Errorf("insert user: %w", insertErr)
 			}
 		} else {
 			userID = existingID
 		}
 
-		// Link OAuth account
-		_, err = h.pool.Exec(ctx,
-			"INSERT INTO oauth_accounts (user_id, provider, provider_user_id, provider_email) VALUES ($1, $2, $3, $4)",
+		// Link the OAuth account to this user.
+		if _, linkErr := tx.Exec(ctx,
+			"INSERT INTO oauth_accounts (user_id, provider, provider_user_id, provider_email) VALUES ($1, $2, $3, $4) ON CONFLICT (provider, provider_user_id) DO NOTHING",
 			userID, providerName, profile.ProviderUserID, profile.Email,
-		)
-		if err != nil {
-			return dbUser{}, fmt.Errorf("link oauth account: %w", err)
+		); linkErr != nil {
+			log.Printf("[auth] upsertUser: link oauth account failed: %v", linkErr)
+			return dbUser{}, fmt.Errorf("link oauth account: %w", linkErr)
 		}
 	}
 
 	var user dbUser
-	err = h.pool.QueryRow(ctx,
+	if err = tx.QueryRow(ctx,
 		"SELECT id::text, email, display_name, totp_enabled, is_admin FROM users WHERE id = $1", userID,
-	).Scan(&user.ID, &user.Email, &user.DisplayName, &user.TOTPEnabled, &user.IsAdmin)
-	return user, err
+	).Scan(&user.ID, &user.Email, &user.DisplayName, &user.TOTPEnabled, &user.IsAdmin); err != nil {
+		log.Printf("[auth] upsertUser: final user fetch failed (userID=%q): %v", userID, err)
+		return dbUser{}, fmt.Errorf("fetch user: %w", err)
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return dbUser{}, fmt.Errorf("commit tx: %w", err)
+	}
+	return user, nil
 }
 
 func (h *Handler) providerCredentials(providerName string) (clientID, redirectURI string) {

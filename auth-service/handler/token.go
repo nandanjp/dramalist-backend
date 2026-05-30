@@ -39,8 +39,8 @@ func (h *Handler) RefreshToken(c *gin.Context) {
 	// Load user
 	var user dbUser
 	if err := h.pool.QueryRow(ctx,
-		"SELECT id::text, email, display_name, totp_enabled FROM users WHERE id = $1", userID,
-	).Scan(&user.ID, &user.Email, &user.DisplayName, &user.TOTPEnabled); err != nil {
+		"SELECT id::text, email, display_name, totp_enabled, is_admin FROM users WHERE id = $1", userID,
+	).Scan(&user.ID, &user.Email, &user.DisplayName, &user.TOTPEnabled, &user.IsAdmin); err != nil {
 		errJSON(c, http.StatusUnauthorized, "user not found")
 		return
 	}

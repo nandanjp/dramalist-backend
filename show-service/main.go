@@ -11,11 +11,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"dramalist/show-service/config"
 	"dramalist/show-service/db"
 	"dramalist/show-service/handler"
 	"dramalist/show-service/kafka"
+	"dramalist/show-service/middleware"
 )
 
 func main() {
@@ -34,9 +36,14 @@ func main() {
 	producer := kafka.NewProducer(cfg)
 	defer producer.Close()
 
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
 	r := gin.New()
 	r.Use(gin.Recovery())
-	r.Use(gin.Logger())
+	m := middleware.NewMetrics("show_service")
+	r.Use(m.Handler())
+	r.Use(middleware.RequestLogger("show_service"))
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	h := handler.New(cfg, pool, producer)
 	h.Register(r)

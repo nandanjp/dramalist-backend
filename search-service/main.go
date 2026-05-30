@@ -11,11 +11,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"dramalist/search-service/config"
 	"dramalist/search-service/elastic"
 	"dramalist/search-service/handler"
 	kafkaconsumer "dramalist/search-service/kafka"
+	"dramalist/search-service/middleware"
 )
 
 func main() {
@@ -57,9 +59,15 @@ func main() {
 
 	h := handler.New(es)
 
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
+	ms := middleware.NewMetrics("search_service")
+	r.Use(ms.Handler())
+	r.Use(middleware.RequestLogger("search_service"))
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	h.RegisterRoutes(r)
 
 	srv := &http.Server{
