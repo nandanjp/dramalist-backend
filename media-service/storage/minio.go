@@ -51,9 +51,17 @@ func (s *Store) ensureBucket(ctx context.Context) error {
 	return nil
 }
 
-// MediaKey builds the object key: {entityType}/{entityID}/{mediaType}/{id}.{ext}
-func MediaKey(entityType, entityID, mediaType, id, ext string) string {
-	return fmt.Sprintf("%s/%s/%s/%s.%s", entityType, entityID, mediaType, id, ext)
+// MediaKeyPrefix returns the shared key prefix for all variants of an image:
+// {entityType}/{entityID}/{mediaType}/{id}_
+func MediaKeyPrefix(entityType, entityID, mediaType, id string) string {
+	return fmt.Sprintf("%s/%s/%s/%s_", entityType, entityID, mediaType, id)
+}
+
+// MediaKeyVariant builds the full object key for a sized WebP variant:
+// {entityType}/{entityID}/{mediaType}/{id}_{size}.webp
+// size is one of "thumb", "medium", "large".
+func MediaKeyVariant(entityType, entityID, mediaType, id, size string) string {
+	return MediaKeyPrefix(entityType, entityID, mediaType, id) + size + ".webp"
 }
 
 // PutObject streams r into the media bucket at key.
