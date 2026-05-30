@@ -27,6 +27,7 @@ const maxContentLen = 10_000
 type reviewResponse struct {
 	ID               string    `json:"id"`
 	CatalogID        string    `json:"catalog_id"`
+	CatalogTitle     *string   `json:"catalog_title"`
 	UserID           string    `json:"user_id"`
 	Rating           float64   `json:"rating"`
 	Content          *string   `json:"content"`
@@ -54,6 +55,7 @@ type listResponse struct {
 
 type createReviewRequest struct {
 	CatalogID        string   `json:"catalog_id"  binding:"required"`
+	CatalogTitle     *string  `json:"catalog_title"`
 	Rating           *float64 `json:"rating"`
 	Content          *string  `json:"content"`
 	ContainsSpoilers bool     `json:"contains_spoilers"`
@@ -106,10 +108,10 @@ func (h *Handler) CreateReview(c *gin.Context) {
 
 	var reviewID string
 	err := h.pool.QueryRow(ctx,
-		`INSERT INTO reviews (catalog_id, user_id, rating, content, contains_spoilers, is_public)
-		 VALUES ($1, $2, $3, $4, $5, $6)
+		`INSERT INTO reviews (catalog_id, catalog_title, user_id, rating, content, contains_spoilers, is_public)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 RETURNING id::text`,
-		req.CatalogID, userID, *req.Rating, req.Content, req.ContainsSpoilers, isPublic,
+		req.CatalogID, req.CatalogTitle, userID, *req.Rating, req.Content, req.ContainsSpoilers, isPublic,
 	).Scan(&reviewID)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique") {
@@ -166,7 +168,7 @@ func (h *Handler) ListShowReviews(c *gin.Context) {
 	}
 
 	rows, err := h.pool.Query(ctx,
-		`SELECT id::text, catalog_id::text, user_id::text, rating, content,
+		`SELECT id::text, catalog_id::text, catalog_title, user_id::text, rating, content,
 		        contains_spoilers, is_public, created_at, updated_at
 		 FROM reviews
 		 WHERE catalog_id = $1 AND (is_public = true OR user_id = $2)
@@ -252,7 +254,7 @@ func (h *Handler) ListMyReviews(c *gin.Context) {
 	}
 
 	rows, err := h.pool.Query(ctx,
-		`SELECT id::text, catalog_id::text, user_id::text, rating, content,
+		`SELECT id::text, catalog_id::text, catalog_title, user_id::text, rating, content,
 		        contains_spoilers, is_public, created_at, updated_at
 		 FROM reviews WHERE user_id = $1
 		 ORDER BY updated_at DESC
@@ -448,7 +450,7 @@ type scanner interface {
 func scanReview(row scanner) (reviewResponse, error) {
 	var r reviewResponse
 	err := row.Scan(
-		&r.ID, &r.CatalogID, &r.UserID, &r.Rating, &r.Content,
+		&r.ID, &r.CatalogID, &r.CatalogTitle, &r.UserID, &r.Rating, &r.Content,
 		&r.ContainsSpoilers, &r.IsPublic, &r.CreatedAt, &r.UpdatedAt,
 	)
 	if err == nil && r.Content != nil {
@@ -460,7 +462,7 @@ func scanReview(row scanner) (reviewResponse, error) {
 
 func (h *Handler) fetchReview(ctx context.Context, reviewID string) (reviewResponse, error) {
 	row := h.pool.QueryRow(ctx,
-		`SELECT id::text, catalog_id::text, user_id::text, rating, content,
+		`SELECT id::text, catalog_id::text, catalog_title, user_id::text, rating, content,
 		        contains_spoilers, is_public, created_at, updated_at
 		 FROM reviews WHERE id = $1`, reviewID)
 	return scanReview(row)
