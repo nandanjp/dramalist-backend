@@ -10,6 +10,9 @@ import (
 // RequestLogger replaces gin.Logger() with structured JSON output parseable by Loki.
 func RequestLogger(serviceName string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		requestID := c.GetHeader("X-Request-ID")
+		c.Set("request_id", requestID)
+
 		start := time.Now()
 		c.Next()
 
@@ -26,6 +29,7 @@ func RequestLogger(serviceName string) gin.HandlerFunc {
 			slog.Int64("latency_ms", time.Since(start).Milliseconds()),
 			slog.String("user_id", c.GetHeader("X-User-Id")),
 			slog.String("client_ip", c.ClientIP()),
+			slog.String("request_id", requestID),
 		)
 	}
 }

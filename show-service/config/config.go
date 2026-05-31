@@ -16,7 +16,14 @@ type Config struct {
 	PostgresHost     string `env:"POSTGRES_HOST" envDefault:"postgres"`
 	PostgresPort     int    `env:"POSTGRES_PORT" envDefault:"5432"`
 
+	RedisHost string `env:"REDIS_HOST" envDefault:"redis"`
+	RedisPort int    `env:"REDIS_PORT" envDefault:"6379"`
+
 	KafkaBootstrapServers string `env:"KAFKA_BOOTSTRAP_SERVERS" envDefault:"kafka:9092"`
+}
+
+func (c *Config) RedisAddr() string {
+	return fmt.Sprintf("%s:%d", c.RedisHost, c.RedisPort)
 }
 
 func (c *Config) PostgresDSN() string {

@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -34,13 +35,17 @@ type mediaRecord struct {
 	MediumURL  string `json:"medium_url"`
 	LargeURL   string `json:"large_url"`
 	SizeBytes  *int64 `json:"size_bytes,omitempty"`
-	CreatedAt  string `json:"created_at"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 // Upload accepts a multipart image and stores three WebP variants (thumb/medium/large)
 // in MinIO, then records them in media_db as a single row.
 // Form fields: entity_type, entity_id, media_type, file.
 func (h *Handler) Upload(c *gin.Context) {
+	if c.GetHeader("X-User-Id") == "" {
+		errJSON(c, http.StatusUnauthorized, "authentication required")
+		return
+	}
 	entityType := c.PostForm("entity_type")
 	entityID := c.PostForm("entity_id")
 	mediaType := c.PostForm("media_type")
@@ -193,7 +198,7 @@ func (h *Handler) ListByEntity(c *gin.Context) {
 		`SELECT id, entity_type, entity_id, media_type, thumb_url, medium_url, large_url,
 		        size_bytes, created_at
 		 FROM media WHERE entity_type = $1 AND entity_id = $2 AND is_active = true
-		 ORDER BY created_at DESC`,
+		 ORDER BY created_at DESC LIMIT 100`,
 		entityType, entityID,
 	)
 	if err != nil {
@@ -220,19 +225,36 @@ func (h *Handler) ListByEntity(c *gin.Context) {
 }
 
 // Delete soft-deletes a media record and removes all three variant objects from MinIO.
+// Requires admin role, or the caller must be the owning user (entity_type=user, entity_id=caller).
 func (h *Handler) Delete(c *gin.Context) {
+	userID := c.GetHeader("X-User-Id")
+	if userID == "" {
+		errJSON(c, http.StatusUnauthorized, "authentication required")
+		return
+	}
 	id := c.Param("id")
+	ctx := c.Request.Context()
 
-	var prefix string
-	err := h.pool.QueryRow(c.Request.Context(),
-		`UPDATE media SET is_active = false WHERE id = $1 RETURNING s3_key_prefix`, id,
-	).Scan(&prefix)
-	if err != nil {
+	// Fetch entity ownership info before mutating
+	var prefix, entityType, entityID string
+	if err := h.pool.QueryRow(ctx,
+		`SELECT s3_key_prefix, entity_type, entity_id FROM media WHERE id = $1 AND is_active = true`, id,
+	).Scan(&prefix, &entityType, &entityID); err != nil {
 		errJSON(c, http.StatusNotFound, "media not found")
 		return
 	}
 
-	ctx := c.Request.Context()
+	// Allow: admin role, or the user deleting their own entity media
+	if c.GetHeader("X-User-Role") != "admin" && !(entityType == "user" && entityID == userID) {
+		errJSON(c, http.StatusForbidden, "permission denied")
+		return
+	}
+
+	if _, err := h.pool.Exec(ctx, `UPDATE media SET is_active = false WHERE id = $1`, id); err != nil {
+		errJSON(c, http.StatusInternalServerError, "delete failed")
+		return
+	}
+
 	for _, size := range []string{"thumb", "medium", "large"} {
 		if err := h.store.DeleteObject(ctx, prefix+size+".webp"); err != nil {
 			log.Printf("media delete object %s%s.webp: %v (record already soft-deleted)", prefix, size, err)

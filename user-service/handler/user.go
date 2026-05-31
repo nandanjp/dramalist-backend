@@ -3,17 +3,25 @@ package handler
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
+
+	"dramalist/user-service/db"
 )
 
 // slugPattern: 3-30 chars, lowercase alphanum + hyphens, no leading/trailing hyphens.
 var slugPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$`)
+
+const (
+	profileCacheTTL = 2 * time.Minute
+	slugCacheTTL    = 5 * time.Minute
+)
 
 // ── Response types ────────────────────────────────────────────────────────────
 
@@ -52,12 +60,12 @@ type statsResponse struct {
 // ── Request types ─────────────────────────────────────────────────────────────
 
 type patchMeRequest struct {
-	DisplayName *string      `json:"display_name"`
-	AvatarURL   *string      `json:"avatar_url"`
-	Bio         *string      `json:"bio"`
-	IsPublic    *bool        `json:"is_public"`
-	ProfileSlug *string      `json:"profile_slug"`
-	Preferences *patchPrefs  `json:"preferences"`
+	DisplayName *string     `json:"display_name"`
+	AvatarURL   *string     `json:"avatar_url"`
+	Bio         *string     `json:"bio"`
+	IsPublic    *bool       `json:"is_public"`
+	ProfileSlug *string     `json:"profile_slug"`
+	Preferences *patchPrefs `json:"preferences"`
 }
 
 type patchPrefs struct {
@@ -82,30 +90,31 @@ func (h *Handler) GetMe(c *gin.Context) {
 	email := c.GetHeader("X-User-Email")
 	displayName := c.GetHeader("X-User-Display-Name")
 	if displayName == "" {
-		displayName = email // fallback: use email as display name
+		displayName = email
 	}
 
-	_, err := h.pool.Exec(ctx,
-		`INSERT INTO profiles (id, email, display_name)
-		 VALUES ($1, $2, $3)
-		 ON CONFLICT (id) DO NOTHING`,
-		userID, email, displayName,
-	)
-	if err != nil {
+	if err := h.store.UpsertProfile(ctx, userID, email, displayName); err != nil {
 		errJSON(c, http.StatusInternalServerError, "profile init failed")
 		return
 	}
-
-	_, err = h.pool.Exec(ctx,
-		"INSERT INTO preferences (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING",
-		userID,
-	)
-	if err != nil {
+	if err := h.store.UpsertPreferences(ctx, userID); err != nil {
 		errJSON(c, http.StatusInternalServerError, "preferences init failed")
 		return
 	}
 
-	h.respondWithProfile(c, userID)
+	// Cache-aside: check Redis before hitting DB for the full profile response.
+	cacheKey := "profile:" + userID
+	if h.rdb != nil {
+		if cached, err := h.rdb.Get(ctx, cacheKey).Result(); err == nil {
+			var resp meResponse
+			if json.Unmarshal([]byte(cached), &resp) == nil {
+				c.JSON(http.StatusOK, resp)
+				return
+			}
+		}
+	}
+
+	h.respondWithProfile(c, userID, cacheKey)
 }
 
 // ── PATCH /users/me ───────────────────────────────────────────────────────────
@@ -125,93 +134,47 @@ func (h *Handler) PatchMe(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// Build profile UPDATE
-	profileArgs := []any{userID}
-	profileCols := []string{}
-	n := 2
+	if req.ProfileSlug != nil && !slugPattern.MatchString(*req.ProfileSlug) {
+		errJSON(c, http.StatusBadRequest, "profile_slug must be 3-30 lowercase alphanumeric chars or hyphens, no leading/trailing hyphens")
+		return
+	}
 
-	if req.DisplayName != nil {
-		profileCols = append(profileCols, fmt.Sprintf("display_name = $%d", n))
-		profileArgs = append(profileArgs, *req.DisplayName)
-		n++
+	patch := db.ProfilePatch{
+		DisplayName: req.DisplayName,
+		AvatarURL:   req.AvatarURL,
+		Bio:         req.Bio,
+		IsPublic:    req.IsPublic,
+		ProfileSlug: req.ProfileSlug,
 	}
-	if req.AvatarURL != nil {
-		profileCols = append(profileCols, fmt.Sprintf("avatar_url = $%d", n))
-		profileArgs = append(profileArgs, *req.AvatarURL)
-		n++
-	}
-	if req.Bio != nil {
-		profileCols = append(profileCols, fmt.Sprintf("bio = $%d", n))
-		profileArgs = append(profileArgs, *req.Bio)
-		n++
-	}
-	if req.IsPublic != nil {
-		profileCols = append(profileCols, fmt.Sprintf("is_public = $%d", n))
-		profileArgs = append(profileArgs, *req.IsPublic)
-		n++
-	}
-	if req.ProfileSlug != nil {
-		if !slugPattern.MatchString(*req.ProfileSlug) {
-			errJSON(c, http.StatusBadRequest, "profile_slug must be 3-30 lowercase alphanumeric chars or hyphens, no leading/trailing hyphens")
+	if err := h.store.UpdateProfile(ctx, userID, patch); err != nil {
+		if strings.Contains(err.Error(), "unique") {
+			errJSON(c, http.StatusConflict, "profile_slug already taken")
 			return
 		}
-		profileCols = append(profileCols, fmt.Sprintf("profile_slug = $%d", n))
-		profileArgs = append(profileArgs, *req.ProfileSlug)
-		n++
+		errJSON(c, http.StatusInternalServerError, "profile update failed")
+		return
 	}
 
-	if len(profileCols) > 0 {
-		profileCols = append(profileCols, "updated_at = NOW()")
-		query := "UPDATE profiles SET " + strings.Join(profileCols, ", ") + " WHERE id = $1"
-		if _, err := h.pool.Exec(ctx, query, profileArgs...); err != nil {
-			if strings.Contains(err.Error(), "unique") {
-				errJSON(c, http.StatusConflict, "profile_slug already taken")
-				return
-			}
-			errJSON(c, http.StatusInternalServerError, "profile update failed")
-			return
-		}
-	}
-
-	// Build preferences UPDATE
 	if req.Preferences != nil {
 		p := req.Preferences
-		prefArgs := []any{userID}
-		prefCols := []string{}
-		n = 2
-
-		if p.DefaultSort != nil {
-			prefCols = append(prefCols, fmt.Sprintf("default_sort = $%d", n))
-			prefArgs = append(prefArgs, *p.DefaultSort)
-			n++
+		prefsPatch := db.PrefsPatch{
+			DefaultSort:         p.DefaultSort,
+			DefaultStatusFilter: p.DefaultStatusFilter,
+			DefaultGenreFilter:  p.DefaultGenreFilter,
+			UITheme:             p.UITheme,
 		}
-		if p.DefaultStatusFilter != nil {
-			prefCols = append(prefCols, fmt.Sprintf("default_status_filter = $%d", n))
-			prefArgs = append(prefArgs, *p.DefaultStatusFilter)
-			n++
-		}
-		if p.DefaultGenreFilter != nil {
-			prefCols = append(prefCols, fmt.Sprintf("default_genre_filter = $%d", n))
-			prefArgs = append(prefArgs, *p.DefaultGenreFilter)
-			n++
-		}
-		if p.UITheme != nil {
-			prefCols = append(prefCols, fmt.Sprintf("ui_theme = $%d", n))
-			prefArgs = append(prefArgs, *p.UITheme)
-			n++
-		}
-
-		if len(prefCols) > 0 {
-			prefCols = append(prefCols, "updated_at = NOW()")
-			query := "UPDATE preferences SET " + strings.Join(prefCols, ", ") + " WHERE user_id = $1"
-			if _, err := h.pool.Exec(ctx, query, prefArgs...); err != nil {
-				errJSON(c, http.StatusInternalServerError, "preferences update failed")
-				return
-			}
+		if err := h.store.UpdatePreferences(ctx, userID, prefsPatch); err != nil {
+			errJSON(c, http.StatusInternalServerError, "preferences update failed")
+			return
 		}
 	}
 
-	h.respondWithProfile(c, userID)
+	// Invalidate profile cache so next GetMe reads fresh data.
+	if h.rdb != nil {
+		h.rdb.Del(ctx, "profile:"+userID)
+	}
+
+	h.respondWithProfile(c, userID, "")
 }
 
 // ── GET /users/me/stats ───────────────────────────────────────────────────────
@@ -223,29 +186,21 @@ func (h *Handler) GetMyStats(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
-
-	var stats statsResponse
-	var genreBytes []byte
-
-	err := h.pool.QueryRow(ctx,
-		"SELECT total_watched, total_episodes, avg_rating, genre_breakdown FROM watch_stats WHERE user_id = $1",
-		userID,
-	).Scan(&stats.TotalWatched, &stats.TotalEpisodes, &stats.AvgRating, &genreBytes)
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		c.JSON(http.StatusOK, statsResponse{GenreBreakdown: map[string]int{}})
-		return
-	}
+	stats, err := h.store.GetStats(c.Request.Context(), userID)
 	if err != nil {
 		errJSON(c, http.StatusInternalServerError, "stats fetch failed")
 		return
 	}
-
-	stats.GenreBreakdown = make(map[string]int)
-	json.Unmarshal(genreBytes, &stats.GenreBreakdown) //nolint:errcheck — safe default
-
-	c.JSON(http.StatusOK, stats)
+	if stats == nil {
+		c.JSON(http.StatusOK, statsResponse{GenreBreakdown: map[string]int{}})
+		return
+	}
+	c.JSON(http.StatusOK, statsResponse{
+		TotalWatched:   stats.TotalWatched,
+		TotalEpisodes:  stats.TotalEpisodes,
+		AvgRating:      stats.AvgRating,
+		GenreBreakdown: stats.GenreBreakdown,
+	})
 }
 
 // ── GET /users/:slug ──────────────────────────────────────────────────────────
@@ -254,13 +209,19 @@ func (h *Handler) GetBySlug(c *gin.Context) {
 	slug := c.Param("slug")
 	ctx := c.Request.Context()
 
-	var p profileResponse
-	err := h.pool.QueryRow(ctx,
-		`SELECT id::text, email, display_name, avatar_url, bio, is_public, profile_slug
-		 FROM profiles WHERE profile_slug = $1`,
-		slug,
-	).Scan(&p.ID, &p.Email, &p.DisplayName, &p.AvatarURL, &p.Bio, &p.IsPublic, &p.ProfileSlug)
+	// Cache-aside for public profile by slug.
+	cacheKey := "profile:slug:" + slug
+	if h.rdb != nil {
+		if cached, err := h.rdb.Get(ctx, cacheKey).Result(); err == nil {
+			var p profileResponse
+			if json.Unmarshal([]byte(cached), &p) == nil {
+				c.JSON(http.StatusOK, p)
+				return
+			}
+		}
+	}
 
+	row, err := h.store.GetProfileBySlug(ctx, slug)
 	if errors.Is(err, pgx.ErrNoRows) {
 		errJSON(c, http.StatusNotFound, "profile not found")
 		return
@@ -270,74 +231,149 @@ func (h *Handler) GetBySlug(c *gin.Context) {
 		return
 	}
 
-	if !p.IsPublic {
+	if !row.IsPublic {
 		errJSON(c, http.StatusNotFound, "profile not found")
 		return
+	}
+
+	p := profileResponse{
+		ID:          row.ID,
+		Email:       row.Email,
+		DisplayName: row.DisplayName,
+		AvatarURL:   row.AvatarURL,
+		Bio:         row.Bio,
+		IsPublic:    row.IsPublic,
+		ProfileSlug: row.ProfileSlug,
+		CreatedAt:   row.CreatedAt,
+		UpdatedAt:   row.UpdatedAt,
+	}
+
+	if h.rdb != nil {
+		if b, err := json.Marshal(p); err == nil {
+			h.rdb.Set(ctx, cacheKey, b, slugCacheTTL)
+		}
 	}
 
 	c.JSON(http.StatusOK, p)
 }
 
-// ── Shared helper ─────────────────────────────────────────────────────────────
+// ── GET /users/admin/list ─────────────────────────────────────────────────────
 
-func (h *Handler) respondWithProfile(c *gin.Context, userID string) {
+type adminUserResponse struct {
+	ID          string  `json:"id"`
+	Email       string  `json:"email"`
+	DisplayName string  `json:"display_name"`
+	AvatarURL   *string `json:"avatar_url"`
+	Bio         *string `json:"bio"`
+	IsPublic    bool    `json:"is_public"`
+	ProfileSlug *string `json:"profile_slug"`
+	CreatedAt   string  `json:"created_at"`
+	UpdatedAt   string  `json:"updated_at"`
+}
+
+type adminUserListResponse struct {
+	Users []adminUserResponse `json:"users"`
+	Total int64               `json:"total"`
+}
+
+func (h *Handler) AdminListUsers(c *gin.Context) {
+	if c.GetHeader("X-User-Role") != "admin" {
+		errJSON(c, http.StatusForbidden, "admin access required")
+		return
+	}
+
+	q := strings.TrimSpace(c.Query("q"))
+	page, limit := parsePagination(c)
+
+	rows, total, err := h.store.AdminListUsers(c.Request.Context(), q, page, limit)
+	if err != nil {
+		errJSON(c, http.StatusInternalServerError, "query failed")
+		return
+	}
+
+	users := make([]adminUserResponse, len(rows))
+	for i, u := range rows {
+		users[i] = adminUserResponse{
+			ID:          u.ID,
+			Email:       u.Email,
+			DisplayName: u.DisplayName,
+			AvatarURL:   u.AvatarURL,
+			Bio:         u.Bio,
+			IsPublic:    u.IsPublic,
+			ProfileSlug: u.ProfileSlug,
+			CreatedAt:   u.CreatedAt,
+			UpdatedAt:   u.UpdatedAt,
+		}
+	}
+	c.JSON(http.StatusOK, adminUserListResponse{Users: users, Total: total})
+}
+
+// ── Shared helpers ────────────────────────────────────────────────────────────
+
+func parsePagination(c *gin.Context) (page, limit int) {
+	page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
+	if page < 1 {
+		page = 1
+	}
+	limit, _ = strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+	return
+}
+
+// respondWithProfile fetches the full profile+prefs+stats and responds with JSON.
+// If cacheKey is non-empty, the response is written to Redis on success.
+func (h *Handler) respondWithProfile(c *gin.Context, userID, cacheKey string) {
 	ctx := c.Request.Context()
 
-	var p profileResponse
-	err := h.pool.QueryRow(ctx,
-		`SELECT id::text, email, display_name, avatar_url, bio, is_public, profile_slug,
-		        created_at::text, updated_at::text
-		 FROM profiles WHERE id = $1`,
-		userID,
-	).Scan(&p.ID, &p.Email, &p.DisplayName, &p.AvatarURL, &p.Bio, &p.IsPublic, &p.ProfileSlug,
-		&p.CreatedAt, &p.UpdatedAt)
+	profileRow, err := h.store.GetProfile(ctx, userID)
 	if err != nil {
 		errJSON(c, http.StatusInternalServerError, "profile fetch failed")
 		return
 	}
 
-	var prefs preferencesResponse
+	p := profileResponse{
+		ID:          profileRow.ID,
+		Email:       profileRow.Email,
+		DisplayName: profileRow.DisplayName,
+		AvatarURL:   profileRow.AvatarURL,
+		Bio:         profileRow.Bio,
+		IsPublic:    profileRow.IsPublic,
+		ProfileSlug: profileRow.ProfileSlug,
+		CreatedAt:   profileRow.CreatedAt,
+		UpdatedAt:   profileRow.UpdatedAt,
+	}
+
+	prefsRow, _ := h.store.GetPreferences(ctx, userID)
 	var prefsPtr *preferencesResponse
-	var statusFilter, genreFilter []string
-
-	err = h.pool.QueryRow(ctx,
-		`SELECT default_sort,
-		        COALESCE(default_status_filter, '{}'),
-		        COALESCE(default_genre_filter, '{}'),
-		        ui_theme
-		 FROM preferences WHERE user_id = $1`,
-		userID,
-	).Scan(&prefs.DefaultSort, &statusFilter, &genreFilter, &prefs.UITheme)
-	if err == nil {
-		if statusFilter == nil {
-			statusFilter = []string{}
+	if prefsRow != nil {
+		prefsPtr = &preferencesResponse{
+			DefaultSort:         prefsRow.DefaultSort,
+			DefaultStatusFilter: prefsRow.DefaultStatusFilter,
+			DefaultGenreFilter:  prefsRow.DefaultGenreFilter,
+			UITheme:             prefsRow.UITheme,
 		}
-		if genreFilter == nil {
-			genreFilter = []string{}
-		}
-		prefs.DefaultStatusFilter = statusFilter
-		prefs.DefaultGenreFilter = genreFilter
-		prefsPtr = &prefs
 	}
 
-	var stats statsResponse
+	statsRow, _ := h.store.GetStats(ctx, userID)
 	var statsPtr *statsResponse
-	var genreBytes []byte
-	statsErr := h.pool.QueryRow(ctx,
-		"SELECT total_watched, total_episodes, avg_rating, genre_breakdown FROM watch_stats WHERE user_id = $1",
-		userID,
-	).Scan(&stats.TotalWatched, &stats.TotalEpisodes, &stats.AvgRating, &genreBytes)
-	if statsErr == nil {
-		stats.GenreBreakdown = make(map[string]int)
-		json.Unmarshal(genreBytes, &stats.GenreBreakdown) //nolint:errcheck
-		statsPtr = &stats
-	} else if !errors.Is(statsErr, pgx.ErrNoRows) {
-		// non-fatal; log but continue
+	if statsRow != nil {
+		statsPtr = &statsResponse{
+			TotalWatched:   statsRow.TotalWatched,
+			TotalEpisodes:  statsRow.TotalEpisodes,
+			AvgRating:      statsRow.AvgRating,
+			GenreBreakdown: statsRow.GenreBreakdown,
+		}
 	}
 
-	c.JSON(http.StatusOK, meResponse{
-		Profile:     p,
-		Preferences: prefsPtr,
-		WatchStats:  statsPtr,
-	})
+	resp := meResponse{Profile: p, Preferences: prefsPtr, WatchStats: statsPtr}
+
+	if h.rdb != nil && cacheKey != "" {
+		if b, err := json.Marshal(resp); err == nil {
+			h.rdb.Set(ctx, cacheKey, b, profileCacheTTL)
+		}
+	}
+
+	c.JSON(http.StatusOK, resp)
 }

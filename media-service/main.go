@@ -39,7 +39,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	lvl := slog.LevelInfo
+	if v := os.Getenv("LOG_LEVEL"); v != "" {
+		_ = lvl.UnmarshalText([]byte(v))
+	}
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: lvl})))
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()

@@ -6,17 +6,20 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // ── Domain types ──────────────────────────────────────────────────────────────
 
 type castMemberResponse struct {
-	CastID        string  `json:"cast_id"`
-	ActorID       string  `json:"actor_id"`
-	ActorName     string  `json:"actor_name"`
-	CharacterName *string `json:"character_name"`
-	Role          string  `json:"role"`
-	SortOrder     int     `json:"sort_order"`
+	CastID          string  `json:"cast_id"`
+	ActorID         string  `json:"actor_id"`
+	ActorName       string  `json:"actor_name"`
+	ProfileImageURL *string `json:"profile_image_url"`
+	CharacterName   *string `json:"character_name"`
+	Role            string  `json:"role"`
+	SortOrder       int     `json:"sort_order"`
 }
 
 type addCastMemberRequest struct {
@@ -44,7 +47,7 @@ var errNotOwner = errors.New("not owner")
 
 func (h *Handler) fetchCast(ctx context.Context, catalogID string) ([]castMemberResponse, error) {
 	rows, err := h.pool.Query(ctx,
-		`SELECT cm.id::text, cm.actor_id::text, a.name, cm.character_name, cm.role, cm.sort_order
+		`SELECT cm.id::text, cm.actor_id::text, a.name, a.profile_image_url, cm.character_name, cm.role, cm.sort_order
 		 FROM cast_members cm
 		 JOIN actors a ON a.id = cm.actor_id
 		 WHERE cm.catalog_id = $1
@@ -59,7 +62,7 @@ func (h *Handler) fetchCast(ctx context.Context, catalogID string) ([]castMember
 	cast := make([]castMemberResponse, 0)
 	for rows.Next() {
 		var m castMemberResponse
-		if err := rows.Scan(&m.CastID, &m.ActorID, &m.ActorName, &m.CharacterName, &m.Role, &m.SortOrder); err != nil {
+		if err := rows.Scan(&m.CastID, &m.ActorID, &m.ActorName, &m.ProfileImageURL, &m.CharacterName, &m.Role, &m.SortOrder); err != nil {
 			return nil, err
 		}
 		cast = append(cast, m)
@@ -114,11 +117,26 @@ func (h *Handler) AddCastMember(c *gin.Context) {
 		catalogID, req.ActorID, req.CharacterName, req.Role, req.SortOrder,
 	).Scan(&m.CastID, &m.ActorID, &m.CharacterName, &m.Role, &m.SortOrder)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			switch pgErr.Code {
+			case "23505": // unique_violation
+				errJSON(c, http.StatusConflict, "actor already in cast for this title")
+				return
+			case "23503": // foreign_key_violation
+				errJSON(c, http.StatusNotFound, "catalog entry or actor not found")
+				return
+			}
+		}
 		errJSON(c, http.StatusInternalServerError, "insert failed")
 		return
 	}
 
 	h.pool.QueryRow(ctx, `SELECT name FROM actors WHERE id = $1`, req.ActorID).Scan(&m.ActorName) //nolint:errcheck
+	if h.rdb != nil {
+		h.rdb.Del(ctx, actorCacheVersion+"actor:"+req.ActorID)
+	}
+	invalidateCatalogCache(h, catalogID)
 	c.JSON(http.StatusCreated, m)
 }
 
@@ -169,13 +187,22 @@ func (h *Handler) RemoveCastMember(c *gin.Context) {
 	castID := c.Param("castId")
 	ctx := c.Request.Context()
 
-	result, err := h.pool.Exec(ctx,
-		`DELETE FROM cast_members WHERE id = $1 AND catalog_id = $2`,
+	var actorID string
+	err := h.pool.QueryRow(ctx,
+		`DELETE FROM cast_members WHERE id = $1 AND catalog_id = $2 RETURNING actor_id::text`,
 		castID, catalogID,
-	)
-	if err != nil || result.RowsAffected() == 0 {
-		errJSON(c, http.StatusNotFound, "cast member not found")
+	).Scan(&actorID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			errJSON(c, http.StatusNotFound, "cast member not found")
+			return
+		}
+		errJSON(c, http.StatusInternalServerError, "delete failed")
 		return
 	}
+	if h.rdb != nil {
+		h.rdb.Del(ctx, actorCacheVersion+"actor:"+actorID)
+	}
+	invalidateCatalogCache(h, catalogID)
 	c.Status(http.StatusNoContent)
 }

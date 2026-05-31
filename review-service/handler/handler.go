@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log/slog"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -29,6 +30,7 @@ func (h *Handler) Register(r *gin.Engine) {
 	// routes them correctly (static nodes take priority over wildcard nodes).
 	reviews.GET("/me", h.ListMyReviews)
 	reviews.GET("/public/recent", h.RecentPublicReviews)
+	reviews.GET("/admin/all", h.AdminListReviews)
 	reviews.GET("/catalog/:catalogId", h.ListShowReviews)
 	reviews.GET("/aggregate/:catalogId", h.GetAggregate)
 
@@ -39,5 +41,13 @@ func (h *Handler) Register(r *gin.Engine) {
 }
 
 func errJSON(c *gin.Context, status int, msg string) {
+	if status >= 500 {
+		slog.Error("internal error",
+			"status", status,
+			"msg", msg,
+			"request_id", c.GetString("request_id"),
+			"path", c.Request.URL.Path,
+		)
+	}
 	c.JSON(status, gin.H{"error": msg})
 }

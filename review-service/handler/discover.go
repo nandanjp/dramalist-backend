@@ -1,11 +1,16 @@
 package handler
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
+
+const recentReviewsCacheKey = "reviews:public:recent"
+const recentReviewsCacheTTL = 3 * time.Minute
 
 type publicReviewPreview struct {
 	ID             string    `json:"id"`
@@ -21,6 +26,16 @@ type publicReviewPreview struct {
 // GET /reviews/public/recent
 func (h *Handler) RecentPublicReviews(c *gin.Context) {
 	ctx := c.Request.Context()
+
+	if h.rdb != nil {
+		if cached, err := h.rdb.Get(ctx, recentReviewsCacheKey).Result(); err == nil {
+			var previews []publicReviewPreview
+			if json.Unmarshal([]byte(cached), &previews) == nil {
+				c.JSON(http.StatusOK, previews)
+				return
+			}
+		}
+	}
 
 	rows, err := h.pool.Query(ctx,
 		`SELECT id::text, catalog_id::text, user_id::text, rating,
@@ -46,5 +61,19 @@ func (h *Handler) RecentPublicReviews(c *gin.Context) {
 		}
 		previews = append(previews, p)
 	}
+
+	if h.rdb != nil {
+		if b, err := json.Marshal(previews); err == nil {
+			h.rdb.Set(ctx, recentReviewsCacheKey, b, recentReviewsCacheTTL)
+		}
+	}
+
 	c.JSON(http.StatusOK, previews)
+}
+
+func (h *Handler) invalidateRecentReviewsCache() {
+	if h.rdb == nil {
+		return
+	}
+	h.rdb.Del(context.Background(), recentReviewsCacheKey)
 }

@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -8,6 +10,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 )
+
+const actorCacheTTL = 30 * time.Minute
+const actorCacheVersion = "v2:" // bump when actorDetailResponse shape changes
 
 // ── Domain types ──────────────────────────────────────────────────────────────
 
@@ -24,6 +29,7 @@ type actorResponse struct {
 }
 
 type actorFilmographyEntry struct {
+	CastID        string   `json:"cast_id"`
 	CatalogID     string   `json:"catalog_id"`
 	MediaType     string   `json:"media_type"`
 	Title         string   `json:"title"`
@@ -60,20 +66,44 @@ type patchActorRequest struct {
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
-// SearchActors returns actors matching a name prefix query.
-// GET /actors?q=<name>
+// SearchActors returns actors matching a name prefix, or all actors (up to 100) when q is empty.
+// Supports ?sort=name_asc|name_desc|created_at_desc|created_at_asc (default: name_asc).
+// Response is always {"actors": [...]}.
+// GET /actors?q=<name>&sort=<sort>
 func (h *Handler) SearchActors(c *gin.Context) {
 	q := strings.TrimSpace(c.Query("q"))
-	if q == "" {
-		c.JSON(http.StatusOK, []actorResponse{})
-		return
-	}
 	ctx := c.Request.Context()
-	rows, err := h.pool.Query(ctx,
-		`SELECT id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, created_at, updated_at
-		 FROM actors WHERE lower(name) LIKE lower($1) ORDER BY name LIMIT 20`,
-		q+"%",
-	)
+
+	orderBy := "name ASC"
+	switch c.Query("sort") {
+	case "name_desc":
+		orderBy = "name DESC"
+	case "created_at_desc":
+		orderBy = "created_at DESC"
+	case "created_at_asc":
+		orderBy = "created_at ASC"
+	}
+
+	var rows interface {
+		Next() bool
+		Scan(...any) error
+		Close()
+		Err() error
+	}
+	var err error
+
+	if q == "" {
+		rows, err = h.pool.Query(ctx,
+			`SELECT id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, created_at, updated_at
+			 FROM actors ORDER BY `+orderBy+` LIMIT 100`,
+		)
+	} else {
+		rows, err = h.pool.Query(ctx,
+			`SELECT id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, created_at, updated_at
+			 FROM actors WHERE lower(name) LIKE lower($1) ORDER BY `+orderBy+` LIMIT 50`,
+			q+"%",
+		)
+	}
 	if err != nil {
 		errJSON(c, http.StatusInternalServerError, "query failed")
 		return
@@ -89,7 +119,7 @@ func (h *Handler) SearchActors(c *gin.Context) {
 		}
 		actors = append(actors, a)
 	}
-	c.JSON(http.StatusOK, actors)
+	c.JSON(http.StatusOK, gin.H{"actors": actors})
 }
 
 // GetActorProfile returns a full actor profile with filmography.
@@ -97,49 +127,66 @@ func (h *Handler) SearchActors(c *gin.Context) {
 func (h *Handler) GetActorProfile(c *gin.Context) {
 	id := c.Param("id")
 	ctx := c.Request.Context()
+	cacheKey := actorCacheVersion + "actor:" + id
 
-	var a actorResponse
-	if err := h.pool.QueryRow(ctx,
-		`SELECT id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, created_at, updated_at
-		 FROM actors WHERE id = $1`, id,
-	).Scan(&a.ID, &a.Name, &a.NativeName, &a.Birthdate, &a.Nationality, &a.Biography, &a.ProfileImageURL, &a.CreatedAt, &a.UpdatedAt); err != nil {
-		if err == pgx.ErrNoRows {
-			errJSON(c, http.StatusNotFound, "actor not found")
-			return
+	if h.rdb != nil {
+		if cached, err := h.rdb.Get(ctx, cacheKey).Result(); err == nil {
+			var resp actorDetailResponse
+			if json.Unmarshal([]byte(cached), &resp) == nil {
+				c.JSON(http.StatusOK, resp)
+				return
+			}
 		}
+	}
+
+	row, err := h.querier.GetActorDetail(ctx, id)
+	if err != nil {
 		errJSON(c, http.StatusInternalServerError, "query failed")
 		return
 	}
-
-	rows, err := h.pool.Query(ctx,
-		`SELECT c.id::text, c.media_type, c.title, c.original_title, c.poster_url, c.year,
-		        cm.character_name, cm.role, cm.sort_order
-		 FROM cast_members cm
-		 JOIN catalog c ON c.id = cm.catalog_id
-		 WHERE cm.actor_id = $1
-		 ORDER BY c.year DESC NULLS LAST, c.title ASC`,
-		id,
-	)
-	if err != nil {
-		errJSON(c, http.StatusInternalServerError, "filmography query failed")
+	if row == nil {
+		errJSON(c, http.StatusNotFound, "actor not found")
 		return
 	}
-	defer rows.Close()
 
-	filmography := make([]actorFilmographyEntry, 0)
-	for rows.Next() {
-		var f actorFilmographyEntry
-		if err := rows.Scan(&f.CatalogID, &f.MediaType, &f.Title, &f.OriginalTitle, &f.PosterURL, &f.Year, &f.CharacterName, &f.Role, &f.SortOrder); err != nil {
-			errJSON(c, http.StatusInternalServerError, "scan failed")
-			return
-		}
-		filmography = append(filmography, f)
+	filmography := make([]actorFilmographyEntry, 0, len(row.Filmography))
+	for _, f := range row.Filmography {
+		filmography = append(filmography, actorFilmographyEntry{
+			CastID:        f.CastID,
+			CatalogID:     f.CatalogID,
+			MediaType:     f.MediaType,
+			Title:         f.Title,
+			OriginalTitle: f.OriginalTitle,
+			PosterURL:     f.PosterURL,
+			Year:          f.Year,
+			CharacterName: f.CharacterName,
+			Role:          f.Role,
+			SortOrder:     f.SortOrder,
+		})
 	}
 
-	c.JSON(http.StatusOK, actorDetailResponse{
-		actorResponse: a,
-		Filmography:   filmography,
-	})
+	resp := actorDetailResponse{
+		actorResponse: actorResponse{
+			ID:              row.ID,
+			Name:            row.Name,
+			NativeName:      row.NativeName,
+			Birthdate:       row.Birthdate,
+			Nationality:     row.Nationality,
+			Biography:       row.Biography,
+			ProfileImageURL: row.ProfileImageURL,
+			CreatedAt:       row.CreatedAt,
+			UpdatedAt:       row.UpdatedAt,
+		},
+		Filmography: filmography,
+	}
+
+	if h.rdb != nil {
+		if b, err := json.Marshal(resp); err == nil {
+			h.rdb.Set(ctx, cacheKey, b, actorCacheTTL)
+		}
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
 // CreateActor creates a new global actor (upsert by normalized name). Admin only.
@@ -183,6 +230,33 @@ func (h *Handler) CreateActor(c *gin.Context) {
 	c.JSON(http.StatusCreated, a)
 }
 
+// DeleteActor permanently removes an actor and their cast credits. Admin only.
+// DELETE /actors/:id
+func (h *Handler) DeleteActor(c *gin.Context) {
+	if c.GetHeader("X-User-Role") != "admin" {
+		errJSON(c, http.StatusForbidden, "admin only")
+		return
+	}
+	id := c.Param("id")
+	ctx := c.Request.Context()
+
+	tag, err := h.pool.Exec(ctx, `DELETE FROM actors WHERE id = $1`, id)
+	if err != nil {
+		errJSON(c, http.StatusInternalServerError, "delete failed")
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		errJSON(c, http.StatusNotFound, "actor not found")
+		return
+	}
+
+	if h.rdb != nil {
+		h.rdb.Del(context.Background(), actorCacheVersion+"actor:"+id)
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
 // UpdateActor patches an actor's profile. Admin only.
 // PATCH /actors/:id
 func (h *Handler) UpdateActor(c *gin.Context) {
@@ -221,5 +295,10 @@ func (h *Handler) UpdateActor(c *gin.Context) {
 		errJSON(c, http.StatusInternalServerError, "update failed")
 		return
 	}
+
+	if h.rdb != nil {
+		h.rdb.Del(context.Background(), actorCacheVersion+"actor:"+id)
+	}
+
 	c.JSON(http.StatusOK, a)
 }

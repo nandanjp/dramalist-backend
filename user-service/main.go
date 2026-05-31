@@ -21,6 +21,7 @@ import (
 	"dramalist/user-service/middleware"
 )
 
+
 func main() {
 	cfg := config.Load()
 
@@ -46,7 +47,11 @@ func main() {
 	consumerCtx, consumerCancel := context.WithCancel(context.Background())
 	go consumer.Run(consumerCtx)
 
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	lvl := slog.LevelInfo
+	if v := os.Getenv("LOG_LEVEL"); v != "" {
+		_ = lvl.UnmarshalText([]byte(v))
+	}
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: lvl})))
 
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -55,7 +60,7 @@ func main() {
 	r.Use(middleware.RequestLogger("user_service"))
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	h := handler.New(cfg, pool, rdb)
+	h := handler.New(cfg, db.NewPostgresStore(pool), rdb)
 	h.Register(r)
 
 	srv := &http.Server{

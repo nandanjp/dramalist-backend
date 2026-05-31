@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -10,8 +12,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 
+	"dramalist/show-service/db"
 	"dramalist/show-service/kafka"
 )
+
+const catalogDetailTTL = time.Hour
 
 // ── Domain types ──────────────────────────────────────────────────────────────
 
@@ -75,6 +80,17 @@ var validAiringStatuses = map[string]bool{
 	"upcoming":  true,
 }
 
+// validCatalogSorts maps safe sort param values to SQL ORDER BY expressions.
+var validCatalogSorts = map[string]string{
+	"title_asc":       "title ASC",
+	"title_desc":      "title DESC",
+	"year_asc":        "year ASC NULLS LAST",
+	"year_desc":       "year DESC NULLS LAST",
+	"created_at_desc": "created_at DESC",
+	"created_at_asc":  "created_at ASC",
+	"updated_at_desc": "updated_at DESC",
+}
+
 const catalogSelectCols = `id::text, media_type, title, original_title, synopsis, poster_url,
     year, country, language, episode_count, duration_minutes, genre,
     airing_status, created_by::text, created_at, updated_at`
@@ -129,9 +145,10 @@ func (h *Handler) ListCatalog(c *gin.Context) {
 		args = append(args, mt)
 		idx++
 	}
-	if genre := c.Query("genre"); genre != "" {
-		where = append(where, fmt.Sprintf("$%d = ANY(genre)", idx))
-		args = append(args, genre)
+	if genres := c.QueryArray("genre"); len(genres) > 0 {
+		// array overlap: entry must have at least one of the requested genres
+		where = append(where, fmt.Sprintf("genre && $%d::text[]", idx))
+		args = append(args, genres)
 		idx++
 	}
 	if yrFrom := c.Query("year_from"); yrFrom != "" {
@@ -164,6 +181,11 @@ func (h *Handler) ListCatalog(c *gin.Context) {
 		idx++
 	}
 
+	orderBy := validCatalogSorts[c.DefaultQuery("sort", "title_asc")]
+	if orderBy == "" {
+		orderBy = "title ASC"
+	}
+
 	whereClause := strings.Join(where, " AND ")
 
 	var total int
@@ -178,7 +200,7 @@ func (h *Handler) ListCatalog(c *gin.Context) {
 	args = append(args, limit, offset)
 	rows, err := h.pool.Query(ctx,
 		"SELECT "+catalogSelectCols+" FROM catalog WHERE "+whereClause+
-			fmt.Sprintf(" ORDER BY title ASC LIMIT $%d OFFSET $%d", idx, idx+1),
+			fmt.Sprintf(" ORDER BY %s LIMIT $%d OFFSET $%d", orderBy, idx, idx+1),
 		args...,
 	)
 	if err != nil {
@@ -210,29 +232,62 @@ func (h *Handler) ListCatalog(c *gin.Context) {
 func (h *Handler) GetCatalogEntry(c *gin.Context) {
 	id := c.Param("id")
 	ctx := c.Request.Context()
+	cacheKey := "catalog:" + id
 
-	entry, err := scanCatalog(h.pool.QueryRow(ctx,
-		"SELECT "+catalogSelectCols+" FROM catalog WHERE id = $1", id,
-	))
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			errJSON(c, http.StatusNotFound, "not found")
-			return
+	if h.rdb != nil {
+		if cached, err := h.rdb.Get(ctx, cacheKey).Result(); err == nil {
+			var resp catalogDetailResponse
+			if json.Unmarshal([]byte(cached), &resp) == nil {
+				c.JSON(http.StatusOK, resp)
+				return
+			}
 		}
+	}
+
+	row, err := h.querier.GetCatalogDetail(ctx, id)
+	if err != nil {
 		errJSON(c, http.StatusInternalServerError, "query failed")
 		return
 	}
-
-	cast, err := h.fetchCast(ctx, id)
-	if err != nil {
-		errJSON(c, http.StatusInternalServerError, "cast query failed")
+	if row == nil {
+		errJSON(c, http.StatusNotFound, "not found")
 		return
 	}
 
-	c.JSON(http.StatusOK, catalogDetailResponse{
-		catalogResponse: entry,
-		Cast:            cast,
-	})
+	resp := catalogDetailResponse{
+		catalogResponse: catalogRowToResponse(row.CatalogRow),
+		Cast:            castRowsToResponse(row.Cast),
+	}
+
+	if h.rdb != nil {
+		if b, err := json.Marshal(resp); err == nil {
+			h.rdb.Set(ctx, cacheKey, b, catalogDetailTTL)
+		}
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+func castRowsToResponse(rows []db.CastMemberRow) []castMemberResponse {
+	out := make([]castMemberResponse, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, castMemberResponse{
+			CastID:        r.CastID,
+			ActorID:       r.ActorID,
+			ActorName:     r.ActorName,
+			CharacterName: r.CharacterName,
+			Role:          r.Role,
+			SortOrder:     r.SortOrder,
+		})
+	}
+	return out
+}
+
+func invalidateCatalogCache(h *Handler, id string) {
+	if h.rdb == nil {
+		return
+	}
+	h.rdb.Del(context.Background(), "catalog:"+id)
 }
 
 // CreateCatalogEntry creates a new catalog entry. Admin only.
@@ -293,6 +348,7 @@ func (h *Handler) CreateCatalogEntry(c *gin.Context) {
 		IsPublic:  true,
 	})
 
+	h.invalidateDiscoverCache()
 	c.JSON(http.StatusCreated, entry)
 }
 
@@ -398,6 +454,8 @@ func (h *Handler) UpdateCatalogEntry(c *gin.Context) {
 		IsPublic:  true,
 	})
 
+	invalidateCatalogCache(h, id)
+	h.invalidateDiscoverCache()
 	c.JSON(http.StatusOK, entry)
 }
 
@@ -422,5 +480,7 @@ func (h *Handler) DeleteCatalogEntry(c *gin.Context) {
 		CatalogID: id,
 	})
 
+	invalidateCatalogCache(h, id)
+	h.invalidateDiscoverCache()
 	c.Status(http.StatusNoContent)
 }

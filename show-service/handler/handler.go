@@ -1,21 +1,26 @@
 package handler
 
 import (
+	"log/slog"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
 	"dramalist/show-service/config"
+	"dramalist/show-service/db"
 	"dramalist/show-service/kafka"
 )
 
 type Handler struct {
 	cfg      *config.Config
 	pool     *pgxpool.Pool
+	querier  db.Querier
+	rdb      *redis.Client
 	producer *kafka.Producer
 }
 
-func New(cfg *config.Config, pool *pgxpool.Pool, producer *kafka.Producer) *Handler {
-	return &Handler{cfg: cfg, pool: pool, producer: producer}
+func New(cfg *config.Config, pool *pgxpool.Pool, querier db.Querier, rdb *redis.Client, producer *kafka.Producer) *Handler {
+	return &Handler{cfg: cfg, pool: pool, querier: querier, rdb: rdb, producer: producer}
 }
 
 func (h *Handler) Register(r *gin.Engine) {
@@ -52,6 +57,7 @@ func (h *Handler) Register(r *gin.Engine) {
 	actors.POST("", h.CreateActor)
 	actors.GET("/:id", h.GetActorProfile)
 	actors.PATCH("/:id", h.UpdateActor)
+	actors.DELETE("/:id", h.DeleteActor)
 
 	// ── Discovery (public) ─────────────────────────────────────────────────────
 	r.GET("/shows/public/trending", h.TrendingShows)
@@ -59,5 +65,13 @@ func (h *Handler) Register(r *gin.Engine) {
 }
 
 func errJSON(c *gin.Context, status int, msg string) {
+	if status >= 500 {
+		slog.Error("internal error",
+			"status", status,
+			"msg", msg,
+			"request_id", c.GetString("request_id"),
+			"path", c.Request.URL.Path,
+		)
+	}
 	c.JSON(status, gin.H{"error": msg})
 }

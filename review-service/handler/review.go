@@ -129,6 +129,9 @@ func (h *Handler) CreateReview(c *gin.Context) {
 	if err := h.recomputeAggregate(ctx, req.CatalogID); err != nil {
 		slog.Error("aggregate recompute failed", "catalog_id", req.CatalogID, "err", err)
 	}
+	if isPublic {
+		h.invalidateRecentReviewsCache()
+	}
 
 	go h.producer.Publish(context.Background(), kafka.ReviewEvent{
 		Event:            "review.created",
@@ -373,6 +376,10 @@ func (h *Handler) UpdateReview(c *gin.Context) {
 		if err := h.recomputeAggregate(ctx, catalogID); err != nil {
 			slog.Error("aggregate recompute failed", "catalog_id", catalogID, "err", err)
 		}
+		// Visibility change affects the public recent reviews feed
+		if req.IsPublic != nil {
+			h.invalidateRecentReviewsCache()
+		}
 	}
 
 	review, err := h.fetchReview(ctx, reviewID)
@@ -429,6 +436,7 @@ func (h *Handler) DeleteReview(c *gin.Context) {
 	if err := h.recomputeAggregate(ctx, catalogID); err != nil {
 		slog.Error("aggregate recompute failed", "catalog_id", catalogID, "err", err)
 	}
+	h.invalidateRecentReviewsCache()
 
 	go h.producer.Publish(context.Background(), kafka.ReviewEvent{
 		Event:     "review.deleted",

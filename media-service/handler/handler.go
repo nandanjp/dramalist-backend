@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log/slog"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -29,5 +30,13 @@ func (h *Handler) Register(r *gin.Engine) {
 }
 
 func errJSON(c *gin.Context, status int, msg string) {
+	if status >= 500 {
+		slog.Error("internal error",
+			"status", status,
+			"msg", msg,
+			"request_id", c.GetString("request_id"),
+			"path", c.Request.URL.Path,
+		)
+	}
 	c.JSON(status, gin.H{"error": msg})
 }

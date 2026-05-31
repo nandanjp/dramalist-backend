@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"dramalist/show-service/cache"
 	"dramalist/show-service/config"
 	"dramalist/show-service/db"
 	"dramalist/show-service/handler"
@@ -36,7 +37,19 @@ func main() {
 	producer := kafka.NewProducer(cfg)
 	defer producer.Close()
 
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	rdb, err := cache.Connect(ctx, cfg)
+	if err != nil {
+		slog.Warn("redis unavailable, caching disabled", "err", err)
+		rdb = nil
+	} else {
+		defer rdb.Close()
+	}
+
+	lvl := slog.LevelInfo
+	if v := os.Getenv("LOG_LEVEL"); v != "" {
+		_ = lvl.UnmarshalText([]byte(v))
+	}
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: lvl})))
 
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -45,7 +58,7 @@ func main() {
 	r.Use(middleware.RequestLogger("show_service"))
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	h := handler.New(cfg, pool, producer)
+	h := handler.New(cfg, pool, db.NewPostgresQuerier(pool), rdb, producer)
 	h.Register(r)
 
 	srv := &http.Server{

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log/slog"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -61,7 +62,8 @@ type tokenPair struct {
 // issueTokenPair signs a new JWT access token and generates an opaque refresh
 // token, persisting the refresh token in both Redis (fast lookup) and Postgres
 // (audit trail / "revoke all sessions" capability).
-func (h *Handler) issueTokenPair(ctx context.Context, user dbUser) (tokenPair, error) {
+// signAccessJWT signs a JWT with the given secret for the given user and TTL.
+func signAccessJWT(secret []byte, user dbUser, ttl time.Duration) (string, error) {
 	role := "user"
 	if user.IsAdmin {
 		role = "admin"
@@ -72,10 +74,14 @@ func (h *Handler) issueTokenPair(ctx context.Context, user dbUser) (tokenPair, e
 		"displayName": user.DisplayName,
 		"role":        role,
 		"iat":         time.Now().Unix(),
-		"exp":         time.Now().Add(time.Duration(h.cfg.AccessTokenTTL) * time.Second).Unix(),
+		"exp":         time.Now().Add(ttl).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	accessToken, err := token.SignedString(h.jwtSecret)
+	return token.SignedString(secret)
+}
+
+func (h *Handler) issueTokenPair(ctx context.Context, user dbUser) (tokenPair, error) {
+	accessToken, err := signAccessJWT(h.jwtSecret, user, time.Duration(h.cfg.AccessTokenTTL)*time.Second)
 	if err != nil {
 		return tokenPair{}, fmt.Errorf("sign JWT: %w", err)
 	}
@@ -117,6 +123,14 @@ func (h *Handler) setRefreshCookie(c *gin.Context, refreshToken string) {
 }
 
 func errJSON(c *gin.Context, status int, msg string) {
+	if status >= 500 {
+		slog.Error("internal error",
+			"status", status,
+			"msg", msg,
+			"request_id", c.GetString("request_id"),
+			"path", c.Request.URL.Path,
+		)
+	}
 	c.JSON(status, gin.H{"error": msg})
 }
 
