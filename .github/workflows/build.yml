@@ -19,6 +19,8 @@ jobs:
             matrix:
                 service:
                     - ai-service
+                    - anime-service
+                    - drama-service
                     - auth-service
                     - media-service
                     - review-service
