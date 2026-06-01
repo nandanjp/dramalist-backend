@@ -48,6 +48,7 @@ type ActorRow struct {
 	Nationality     *string
 	Biography       *string
 	ProfileImageURL *string
+	MDLPersonID     *int
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }

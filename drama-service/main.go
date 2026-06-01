@@ -36,7 +36,7 @@ func main() {
 	defer pool.Close()
 
 	client := mdl.NewClient()
-	h := handler.New(pool, client)
+	h := handler.New(pool, client, cfg.MediaServiceURL)
 
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 

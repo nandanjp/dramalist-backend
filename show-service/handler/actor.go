@@ -12,20 +12,21 @@ import (
 )
 
 const actorCacheTTL = 30 * time.Minute
-const actorCacheVersion = "v2:" // bump when actorDetailResponse shape changes
+const actorCacheVersion = "v3:" // bump when actorDetailResponse shape changes
 
 // ── Domain types ──────────────────────────────────────────────────────────────
 
 type actorResponse struct {
-	ID               string     `json:"id"`
-	Name             string     `json:"name"`
-	NativeName       *string    `json:"native_name"`
-	Birthdate        *string    `json:"birthdate"`
-	Nationality      *string    `json:"nationality"`
-	Biography        *string    `json:"biography"`
-	ProfileImageURL  *string    `json:"profile_image_url"`
-	CreatedAt        time.Time  `json:"created_at"`
-	UpdatedAt        time.Time  `json:"updated_at"`
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	NativeName      *string   `json:"native_name"`
+	Birthdate       *string   `json:"birthdate"`
+	Nationality     *string   `json:"nationality"`
+	Biography       *string   `json:"biography"`
+	ProfileImageURL *string   `json:"profile_image_url"`
+	MDLPersonID     *int      `json:"mdl_person_id"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 type actorFilmographyEntry struct {
@@ -94,12 +95,12 @@ func (h *Handler) SearchActors(c *gin.Context) {
 
 	if q == "" {
 		rows, err = h.pool.Query(ctx,
-			`SELECT id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, created_at, updated_at
+			`SELECT id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, mdl_person_id, created_at, updated_at
 			 FROM actors ORDER BY `+orderBy+` LIMIT 100`,
 		)
 	} else {
 		rows, err = h.pool.Query(ctx,
-			`SELECT id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, created_at, updated_at
+			`SELECT id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, mdl_person_id, created_at, updated_at
 			 FROM actors WHERE lower(name) LIKE lower($1) ORDER BY `+orderBy+` LIMIT 50`,
 			q+"%",
 		)
@@ -113,7 +114,7 @@ func (h *Handler) SearchActors(c *gin.Context) {
 	actors := make([]actorResponse, 0)
 	for rows.Next() {
 		var a actorResponse
-		if err := rows.Scan(&a.ID, &a.Name, &a.NativeName, &a.Birthdate, &a.Nationality, &a.Biography, &a.ProfileImageURL, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.NativeName, &a.Birthdate, &a.Nationality, &a.Biography, &a.ProfileImageURL, &a.MDLPersonID, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			errJSON(c, http.StatusInternalServerError, "scan failed")
 			return
 		}
@@ -174,6 +175,7 @@ func (h *Handler) GetActorProfile(c *gin.Context) {
 			Nationality:     row.Nationality,
 			Biography:       row.Biography,
 			ProfileImageURL: row.ProfileImageURL,
+			MDLPersonID:     row.MDLPersonID,
 			CreatedAt:       row.CreatedAt,
 			UpdatedAt:       row.UpdatedAt,
 		},
@@ -220,9 +222,9 @@ func (h *Handler) CreateActor(c *gin.Context) {
 		       biography = COALESCE(EXCLUDED.biography, actors.biography),
 		       profile_image_url = COALESCE(EXCLUDED.profile_image_url, actors.profile_image_url),
 		       updated_at = NOW()
-		 RETURNING id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, created_at, updated_at`,
+		 RETURNING id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, mdl_person_id, created_at, updated_at`,
 		req.Name, req.NativeName, req.Birthdate, req.Nationality, req.Biography, req.ProfileImageURL,
-	).Scan(&a.ID, &a.Name, &a.NativeName, &a.Birthdate, &a.Nationality, &a.Biography, &a.ProfileImageURL, &a.CreatedAt, &a.UpdatedAt)
+	).Scan(&a.ID, &a.Name, &a.NativeName, &a.Birthdate, &a.Nationality, &a.Biography, &a.ProfileImageURL, &a.MDLPersonID, &a.CreatedAt, &a.UpdatedAt)
 	if err != nil {
 		errJSON(c, http.StatusInternalServerError, "insert failed")
 		return
@@ -284,9 +286,9 @@ func (h *Handler) UpdateActor(c *gin.Context) {
 		     profile_image_url = COALESCE($6, profile_image_url),
 		     updated_at       = NOW()
 		 WHERE id = $7
-		 RETURNING id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, created_at, updated_at`,
+		 RETURNING id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, mdl_person_id, created_at, updated_at`,
 		req.Name, req.NativeName, req.Birthdate, req.Nationality, req.Biography, req.ProfileImageURL, id,
-	).Scan(&a.ID, &a.Name, &a.NativeName, &a.Birthdate, &a.Nationality, &a.Biography, &a.ProfileImageURL, &a.CreatedAt, &a.UpdatedAt)
+	).Scan(&a.ID, &a.Name, &a.NativeName, &a.Birthdate, &a.Nationality, &a.Biography, &a.ProfileImageURL, &a.MDLPersonID, &a.CreatedAt, &a.UpdatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			errJSON(c, http.StatusNotFound, "actor not found")

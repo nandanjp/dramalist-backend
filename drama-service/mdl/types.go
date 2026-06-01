@@ -1,5 +1,16 @@
 package mdl
 
+type MDLPersonDetail struct {
+	PersonID    int
+	Slug        string
+	Name        string
+	NativeName  *string
+	ProfileURL  *string
+	Birthdate   *string // ISO "YYYY-MM-DD"
+	Nationality *string
+	Biography   *string
+}
+
 type MDLCastMember struct {
 	PersonID      int
 	Name          string

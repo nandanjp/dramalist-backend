@@ -12,6 +12,9 @@ import (
 type ActorParams struct {
 	Name            string
 	NativeName      *string
+	Birthdate       *string
+	Nationality     *string
+	Biography       *string
 	ProfileImageURL *string
 	MDLPersonID     int
 }
@@ -19,13 +22,17 @@ type ActorParams struct {
 func UpsertActor(ctx context.Context, pool *pgxpool.Pool, p ActorParams) (string, error) {
 	var id string
 	err := pool.QueryRow(ctx, `
-		INSERT INTO actors (name, native_name, profile_image_url, mdl_person_id)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO actors (name, native_name, birthdate, nationality, biography, profile_image_url, mdl_person_id)
+		VALUES ($1, $2, $3::date, $4, $5, $6, $7)
 		ON CONFLICT (mdl_person_id) DO UPDATE
 		  SET name              = EXCLUDED.name,
-		      profile_image_url = EXCLUDED.profile_image_url
+		      native_name       = COALESCE(EXCLUDED.native_name, actors.native_name),
+		      birthdate         = COALESCE(EXCLUDED.birthdate, actors.birthdate),
+		      nationality       = COALESCE(EXCLUDED.nationality, actors.nationality),
+		      biography         = COALESCE(EXCLUDED.biography, actors.biography),
+		      profile_image_url = COALESCE(EXCLUDED.profile_image_url, actors.profile_image_url)
 		RETURNING id::text`,
-		p.Name, p.NativeName, p.ProfileImageURL, p.MDLPersonID,
+		p.Name, p.NativeName, p.Birthdate, p.Nationality, p.Biography, p.ProfileImageURL, p.MDLPersonID,
 	).Scan(&id)
 	if err == nil {
 		return id, nil
@@ -45,6 +52,14 @@ func UpsertActor(ctx context.Context, pool *pgxpool.Pool, p ActorParams) (string
 		}
 	}
 	return "", err
+}
+
+func UpdateActorProfileImage(ctx context.Context, pool *pgxpool.Pool, actorID, url string) error {
+	_, err := pool.Exec(ctx,
+		`UPDATE actors SET profile_image_url = $1, updated_at = NOW() WHERE id = $2`,
+		url, actorID,
+	)
+	return err
 }
 
 func InsertCastMember(ctx context.Context, pool *pgxpool.Pool,

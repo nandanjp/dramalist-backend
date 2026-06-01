@@ -465,6 +465,98 @@ func parseTypeFromLabel(label string) string {
 	return ""
 }
 
+// FetchPerson scrapes an MDL people page (e.g. "900-lee-jong-suk").
+func (c *Client) FetchPerson(ctx context.Context, slug string) (*MDLPersonDetail, error) {
+	doc, err := c.get(ctx, baseURL+"/people/"+slug)
+	if err != nil {
+		return nil, err
+	}
+
+	p := &MDLPersonDetail{
+		PersonID: slugToID(slug),
+		Slug:     slug,
+	}
+
+	// Name
+	name := strings.TrimSpace(doc.Find("h1.film-title").First().Text())
+	name = reYearSuffix.ReplaceAllString(name, "")
+	if name == "" {
+		return nil, fmt.Errorf("FetchPerson: no name found for %q", slug)
+	}
+	p.Name = name
+
+	// Profile image — look in the left column poster area
+	imgSel := doc.Find("div.col-lg-4.col-md-4 img, div.film-content img, div.col-xs-4 img").First()
+	if src := imgSrc(imgSel); src != "" {
+		p.ProfileURL = &src
+	}
+
+	// Biography — the text block in the main column minus the mobile detail list
+	bioContainer := doc.Find("div.col-lg-8.col-md-8 div.col-sm-8.col-lg-12.col-md-12").First()
+	if bioContainer.Length() > 0 {
+		// Remove the hidden detail list so we only get prose text
+		bioContainer.Find("div.hidden-md-up, ul.list").Each(func(_ int, s *goquery.Selection) {
+			s.Remove()
+		})
+		bio := strings.TrimSpace(bioContainer.Text())
+		if bio != "" {
+			p.Biography = &bio
+		}
+	}
+
+	// Detail rows: ul.list.m-b-0 li (person pages use m-b-0, show pages use m-a-0 hidden-md-up)
+	doc.Find("ul.list.m-b-0 li").Each(func(_ int, li *goquery.Selection) {
+		labelRaw := strings.TrimSpace(li.Find("b").First().Text())
+		value := strings.TrimSpace(strings.Replace(li.Text(), labelRaw+" ", "", 1))
+		if value == strings.TrimSpace(li.Text()) {
+			value = strings.TrimSpace(strings.Replace(li.Text(), labelRaw, "", 1))
+		}
+		label := strings.TrimSuffix(labelRaw, ":")
+
+		switch strings.ToLower(label) {
+		case "nationality":
+			if value != "" {
+				p.Nationality = &value
+			}
+		case "also known as", "native name":
+			// Take first entry (before comma) as the native name
+			parts := strings.SplitN(value, ",", 2)
+			n := strings.TrimSpace(parts[0])
+			if n != "" {
+				p.NativeName = &n
+			}
+		case "born":
+			// Format: "Sep 14, 1987 (age 37)" — extract date
+			if bd := parseBirthdate(value); bd != "" {
+				p.Birthdate = &bd
+			}
+		}
+	})
+
+	return p, nil
+}
+
+var reBirthdate = regexp.MustCompile(`([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})`)
+
+// parseBirthdate converts "Sep 14, 1987 (age 37)" → "1987-09-14".
+func parseBirthdate(s string) string {
+	m := reBirthdate.FindStringSubmatch(s)
+	if m == nil {
+		return ""
+	}
+	months := map[string]string{
+		"jan": "01", "feb": "02", "mar": "03", "apr": "04",
+		"may": "05", "jun": "06", "jul": "07", "aug": "08",
+		"sep": "09", "oct": "10", "nov": "11", "dec": "12",
+	}
+	mo, ok := months[strings.ToLower(m[1])[:3]]
+	if !ok {
+		return ""
+	}
+	day := fmt.Sprintf("%02s", m[2])
+	return m[3] + "-" + mo + "-" + day
+}
+
 // parseCountryFromLabel extracts country from labels like "Korean Drama" → "South Korea".
 func parseCountryFromLabel(label string) string {
 	switch {

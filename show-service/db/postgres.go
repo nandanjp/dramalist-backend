@@ -94,10 +94,10 @@ func (q *PostgresQuerier) GetCatalogDetail(ctx context.Context, id string) (*Cat
 func (q *PostgresQuerier) GetActorDetail(ctx context.Context, id string) (*ActorDetailRow, error) {
 	var detail ActorDetailRow
 	err := q.pool.QueryRow(ctx,
-		`SELECT id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, created_at, updated_at
+		`SELECT id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, mdl_person_id, created_at, updated_at
 		 FROM actors WHERE id = $1`, id,
 	).Scan(&detail.ID, &detail.Name, &detail.NativeName, &detail.Birthdate, &detail.Nationality,
-		&detail.Biography, &detail.ProfileImageURL, &detail.CreatedAt, &detail.UpdatedAt)
+		&detail.Biography, &detail.ProfileImageURL, &detail.MDLPersonID, &detail.CreatedAt, &detail.UpdatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}

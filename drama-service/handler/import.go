@@ -87,6 +87,16 @@ func (h *Handler) Import(c *gin.Context) {
 		return
 	}
 
+	// Mirror poster image to MinIO
+	if detail.PosterURL != nil && *detail.PosterURL != "" {
+		if mirrored := h.mirrorImage(ctx, *detail.PosterURL, "catalog", catalogID, "poster", userID); mirrored != "" {
+			if _, err := h.pool.Exec(ctx, `UPDATE catalog SET poster_url = $1 WHERE id = $2`, mirrored, catalogID); err != nil {
+				slog.Warn("update catalog poster_url failed", "err", err)
+			}
+			params.PosterURL = &mirrored
+		}
+	}
+
 	allowedCast := make(map[int]bool, len(req.CastMemberIDs))
 	for _, id := range req.CastMemberIDs {
 		allowedCast[id] = true
@@ -102,15 +112,23 @@ func (h *Handler) Import(c *gin.Context) {
 		}
 
 		actorParams := dramadb.ActorParams{
-			Name:            cm.Name,
-			ProfileImageURL: strPtrIfNonEmpty(cm.PhotoURL),
-			MDLPersonID:     cm.PersonID,
+			Name:        cm.Name,
+			MDLPersonID: cm.PersonID,
 		}
 
 		actorID, err := dramadb.UpsertActor(ctx, h.pool, actorParams)
 		if err != nil {
 			slog.Warn("upsert actor failed, skipping", "actor", cm.Name, "err", err)
 			continue
+		}
+
+		// Mirror profile image only if actor doesn't already have one
+		if cm.PhotoURL != "" {
+			if mirrored := h.mirrorImage(ctx, cm.PhotoURL, "actor", actorID, "profile", userID); mirrored != "" {
+				if err := dramadb.UpdateActorProfileImage(ctx, h.pool, actorID, mirrored); err != nil {
+					slog.Warn("update actor profile image failed", "err", err)
+				}
+			}
 		}
 
 		role := mdl.MapCastRole(cm.Role)

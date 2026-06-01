@@ -12,6 +12,7 @@ type Config struct {
 	PostgresPassword string `env:"POSTGRES_PASSWORD,required"`
 	PostgresHost     string `env:"POSTGRES_HOST"     envDefault:"postgres"`
 	PostgresPort     int    `env:"POSTGRES_PORT"     envDefault:"5432"`
+	MediaServiceURL  string `env:"MEDIA_SERVICE_URL" envDefault:"http://media-service.dramalist.svc.cluster.local:3006"`
 }
 
 func Load() (*Config, error) {

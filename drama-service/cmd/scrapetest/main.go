@@ -17,15 +17,24 @@ func main() {
 	defer cancel()
 
 	client := mdl.NewClient()
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+
+	// Test person fetch — Lee Jong Suk
+	fmt.Println("=== Person: Lee Jong Suk (900-lee-jong-suk) ===")
+	person, err := client.FetchPerson(ctx, "900-lee-jong-suk")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "person error: %v\n", err)
+	} else {
+		enc.Encode(person)
+	}
 
 	// Test search
-	fmt.Println("=== Search: 'reply 1988' ===")
+	fmt.Println("\n=== Search: 'reply 1988' ===")
 	results, hasMore, err := client.Search(ctx, "reply 1988", 1, 5)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "search error: %v\n", err)
 	} else {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
 		enc.Encode(map[string]any{"results": results, "has_more": hasMore})
 	}
 
@@ -36,7 +45,5 @@ func main() {
 		fmt.Fprintf(os.Stderr, "detail error: %v\n", err)
 		os.Exit(1)
 	}
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
 	enc.Encode(detail)
 }
