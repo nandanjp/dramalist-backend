@@ -68,7 +68,7 @@ func (q *PostgresQuerier) GetCatalogDetail(ctx context.Context, id string) (*Cat
 	}
 
 	rows, err := q.pool.Query(ctx,
-		`SELECT cm.id::text, cm.actor_id::text, a.name, cm.character_name, cm.role, cm.sort_order
+		`SELECT cm.id::text, cm.actor_id::text, a.name, a.profile_image_url, cm.character_name, cm.role, cm.sort_order
 		 FROM cast_members cm
 		 JOIN actors a ON a.id = cm.actor_id
 		 WHERE cm.catalog_id = $1
@@ -83,7 +83,7 @@ func (q *PostgresQuerier) GetCatalogDetail(ctx context.Context, id string) (*Cat
 	detail.Cast = make([]CastMemberRow, 0)
 	for rows.Next() {
 		var m CastMemberRow
-		if err := rows.Scan(&m.CastID, &m.ActorID, &m.ActorName, &m.CharacterName, &m.Role, &m.SortOrder); err != nil {
+		if err := rows.Scan(&m.CastID, &m.ActorID, &m.ActorName, &m.ProfileImageURL, &m.CharacterName, &m.Role, &m.SortOrder); err != nil {
 			return nil, err
 		}
 		detail.Cast = append(detail.Cast, m)

@@ -214,8 +214,12 @@ func (c *Client) FetchDetail(ctx context.Context, slug string) (*MDLShowDetail, 
 		}
 	}
 
-	if src := imgSrc(doc.Find(".film-poster img").First()); src != "" {
+	// Try class-based selector first, then fall back to og:image which is always
+	// set for social sharing and doesn't depend on page layout class names.
+	if src := imgSrc(doc.Find(".film-poster img, .film-cover img, .cover img").First()); src != "" {
 		detail.PosterURL = ptr(src)
+	} else if content, exists := doc.Find(`meta[property="og:image"]`).Attr("content"); exists && content != "" {
+		detail.PosterURL = ptr(content)
 	}
 
 	// Synopsis: div.show-synopsis p (strip "Edit Translation" artifact)

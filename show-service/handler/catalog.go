@@ -17,6 +17,7 @@ import (
 )
 
 const catalogDetailTTL = time.Hour
+const catalogCacheVersion = "v2:"
 
 // ── Domain types ──────────────────────────────────────────────────────────────
 
@@ -232,7 +233,7 @@ func (h *Handler) ListCatalog(c *gin.Context) {
 func (h *Handler) GetCatalogEntry(c *gin.Context) {
 	id := c.Param("id")
 	ctx := c.Request.Context()
-	cacheKey := "catalog:" + id
+	cacheKey := catalogCacheVersion + "catalog:" + id
 
 	if h.rdb != nil {
 		if cached, err := h.rdb.Get(ctx, cacheKey).Result(); err == nil {
@@ -272,12 +273,13 @@ func castRowsToResponse(rows []db.CastMemberRow) []castMemberResponse {
 	out := make([]castMemberResponse, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, castMemberResponse{
-			CastID:        r.CastID,
-			ActorID:       r.ActorID,
-			ActorName:     r.ActorName,
-			CharacterName: r.CharacterName,
-			Role:          r.Role,
-			SortOrder:     r.SortOrder,
+			CastID:          r.CastID,
+			ActorID:         r.ActorID,
+			ActorName:       r.ActorName,
+			ProfileImageURL: r.ProfileImageURL,
+			CharacterName:   r.CharacterName,
+			Role:            r.Role,
+			SortOrder:       r.SortOrder,
 		})
 	}
 	return out

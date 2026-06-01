@@ -27,12 +27,13 @@ type CatalogRow struct {
 }
 
 type CastMemberRow struct {
-	CastID        string
-	ActorID       string
-	ActorName     string
-	CharacterName *string
-	Role          string
-	SortOrder     int
+	CastID          string
+	ActorID         string
+	ActorName       string
+	ProfileImageURL *string
+	CharacterName   *string
+	Role            string
+	SortOrder       int
 }
 
 type CatalogDetailRow struct {
