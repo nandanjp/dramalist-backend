@@ -24,13 +24,18 @@ func TypeToMediaType(s string) string {
 
 func CountryToLanguage(country string) *string {
 	m := map[string]string{
-		"South Korea": "Korean",
-		"Japan":       "Japanese",
-		"China":       "Chinese",
-		"Taiwan":      "Chinese",
-		"Thailand":    "Thai",
-		"Philippines": "Filipino",
-		"Hong Kong":   "Cantonese",
+		"South Korea":      "Korean",
+		"Korea":            "Korean",
+		"Japan":            "Japanese",
+		"China":            "Chinese",
+		"China (Mainland)": "Chinese",
+		"Taiwan":           "Chinese",
+		"Thailand":         "Thai",
+		"Philippines":      "Filipino",
+		"Hong Kong":        "Cantonese",
+		"Vietnam":          "Vietnamese",
+		"Indonesia":        "Indonesian",
+		"Malaysia":         "Malay",
 	}
 	if lang, ok := m[country]; ok {
 		return &lang

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -75,6 +76,11 @@ func (h *Handler) SearchActors(c *gin.Context) {
 	q := strings.TrimSpace(c.Query("q"))
 	ctx := c.Request.Context()
 
+	limit := 100
+	if l, err := strconv.Atoi(c.Query("limit")); err == nil && l > 0 && l <= 200 {
+		limit = l
+	}
+
 	orderBy := "name ASC"
 	switch c.Query("sort") {
 	case "name_desc":
@@ -96,13 +102,14 @@ func (h *Handler) SearchActors(c *gin.Context) {
 	if q == "" {
 		rows, err = h.pool.Query(ctx,
 			`SELECT id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, mdl_person_id, created_at, updated_at
-			 FROM actors ORDER BY `+orderBy+` LIMIT 100`,
+			 FROM actors ORDER BY `+orderBy+` LIMIT $1`,
+			limit,
 		)
 	} else {
 		rows, err = h.pool.Query(ctx,
 			`SELECT id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, mdl_person_id, created_at, updated_at
-			 FROM actors WHERE lower(name) LIKE lower($1) ORDER BY `+orderBy+` LIMIT 50`,
-			q+"%",
+			 FROM actors WHERE lower(name) LIKE lower($1) ORDER BY `+orderBy+` LIMIT $2`,
+			q+"%", limit,
 		)
 	}
 	if err != nil {

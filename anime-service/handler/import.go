@@ -102,6 +102,7 @@ func (h *Handler) Import(c *gin.Context) {
 				NativeName:      va.Name.Native,
 				Birthdate:       parseBirthdate(va.DateOfBirth),
 				ProfileImageURL: va.Image.Large,
+				Biography:       va.Description,
 				AnilistPersonID: va.ID,
 			}
 

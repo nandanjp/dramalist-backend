@@ -13,6 +13,7 @@ type MDLPersonDetail struct {
 
 type MDLCastMember struct {
 	PersonID      int
+	PersonSlug    string // e.g. "426-iu" — used to fetch person detail page
 	Name          string
 	CharacterName string
 	Role          string // raw: "Main Role", "Support Role", "Guest Role"

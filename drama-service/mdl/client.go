@@ -399,7 +399,8 @@ func parseCast(doc *goquery.Document) []MDLCastMember {
 		}
 
 		href, _ := castLink.Attr("href") // "/people/426-iu"
-		personID := slugToID(strings.TrimPrefix(href, "/people/"))
+		personSlug := strings.TrimPrefix(href, "/people/")
+		personID := slugToID(personSlug)
 		if personID == 0 {
 			slog.Warn("drama scraper: cast member missing person ID", "href", href)
 			return
@@ -414,19 +415,16 @@ func parseCast(doc *goquery.Document) []MDLCastMember {
 			return
 		}
 
-		// Character name: div.text-ellipsis > small > a
-		characterName := strings.TrimSpace(li.Find("div.text-ellipsis small a").First().Text())
-		if characterName == "" {
-			li.Find("small").Each(func(_ int, sm *goquery.Selection) {
-				if characterName != "" {
-					return
-				}
-				if !sm.HasClass("text-muted") {
-					if t := strings.TrimSpace(sm.Text()); t != "" {
-						characterName = t
-					}
-				}
-			})
+		// Character name: MDL renders "as <a>Name</a>" or plain "as Name" inside
+		// a small tag. Prefer the link text (avoids the "as " prefix); fall back
+		// to full small text and strip the prefix manually.
+		var characterName string
+		if charSel := li.Find("div.text-ellipsis small").First(); charSel.Length() > 0 {
+			if linkText := strings.TrimSpace(charSel.Find("a").First().Text()); linkText != "" {
+				characterName = linkText
+			} else {
+				characterName = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(charSel.Text()), "as "))
+			}
 		}
 
 		role := strings.TrimSpace(li.Find("small.text-muted").First().Text())
@@ -434,6 +432,7 @@ func parseCast(doc *goquery.Document) []MDLCastMember {
 
 		cast = append(cast, MDLCastMember{
 			PersonID:      personID,
+			PersonSlug:    personSlug,
 			Name:          name,
 			CharacterName: characterName,
 			Role:          role,
@@ -489,10 +488,12 @@ func (c *Client) FetchPerson(ctx context.Context, slug string) (*MDLPersonDetail
 	}
 	p.Name = name
 
-	// Profile image — look in the left column poster area
-	imgSel := doc.Find("div.col-lg-4.col-md-4 img, div.film-content img, div.col-xs-4 img").First()
-	if src := imgSrc(imgSel); src != "" {
+	// Profile image — same .film-poster container MDL uses for show posters; falls
+	// back to the og:image meta tag. Both are set before any photos gallery.
+	if src := imgSrc(doc.Find(".film-poster img").First()); src != "" {
 		p.ProfileURL = &src
+	} else if content, exists := doc.Find(`meta[property="og:image"]`).Attr("content"); exists && content != "" {
+		p.ProfileURL = &content
 	}
 
 	// Biography — the text block in the main column minus the mobile detail list

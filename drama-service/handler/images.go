@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"path"
 	"strings"
 	"time"
@@ -74,9 +75,14 @@ func (h *Handler) mirrorImage(ctx context.Context, srcURL, entityType, entityID,
 	_ = w.WriteField("entity_type", entityType)
 	_ = w.WriteField("entity_id", entityID)
 	_ = w.WriteField("media_type", mediaType)
-	fw, err := w.CreateFormFile("file", "image")
+	// Use CreatePart (not CreateFormFile) so the part carries the correct MIME type;
+	// CreateFormFile hardcodes application/octet-stream which the media service rejects.
+	mh := make(textproto.MIMEHeader)
+	mh.Set("Content-Disposition", `form-data; name="file"; filename="image"`)
+	mh.Set("Content-Type", ct)
+	fw, err := w.CreatePart(mh)
 	if err != nil {
-		slog.Warn("mirrorImage: create form file failed", "err", err)
+		slog.Warn("mirrorImage: create form part failed", "err", err)
 		return ""
 	}
 	if _, err := fw.Write(rawBytes); err != nil {

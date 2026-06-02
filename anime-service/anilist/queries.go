@@ -55,6 +55,7 @@ query ($id: Int) {
           name { full native }
           image { large }
           dateOfBirth { year month day }
+          description(asHtml: false)
         }
       }
     }
@@ -133,6 +134,7 @@ type ALPerson struct {
 	Name        ALName  `json:"name"`
 	Image       ALImage `json:"image"`
 	DateOfBirth ALDate  `json:"dateOfBirth"`
+	Description *string `json:"description"`
 }
 
 type ALName struct {

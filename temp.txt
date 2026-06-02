@@ -1,0 +1,157 @@
+	Alchemy of Souls	South Korea	2022	Drama	 10	- / +20/20
+2	Flower of Evil	South Korea	2020	Drama	 10	- / +16/16
+3	It's Okay to Not Be Okay	South Korea	2020	Drama	 10	- / +16/16
+4	Lovely Runner	South Korea	2024	Drama	 10	- / +16/16
+5	Meet Yourself	China	2023	Drama	 10	- / +40/40
+6	Move to Heaven	South Korea	2021	Drama	 10	- / +10/10
+7	Nirvana in Fire	China	2015	Drama	 10	- / +54/54
+8	Reply 1988	South Korea	2015	Drama	 10	- / +20/20
+9	Twenty Five Twenty One	South Korea	2022	Drama	 10	- / +16/16
+10	Twinkling Watermelon	South Korea	2023	Drama	 10	- / +16/16
+11	A Journey to Love	China	2023	Drama	 9.5	- / +40/40
+12	Drawing Closer	Japan	2024	Movie	 9.5	- / +1/1
+13	Hometown Cha-Cha-Cha	South Korea	2021	Drama	 9.5	- / +16/16
+14	Joy of Life	China	2019	Drama	 9.5	- / +46/46
+15	Mr. Queen	South Korea	2020	Drama	 9.5	- / +20/20
+16	Nirvana in Fire Season 2: The Wind Blows in Chang Lin	China	2017	Drama	 9.5	- / +50/50
+17	Our Beloved Summer	South Korea	2021	Drama	 9.5	- / +16/16
+18	Our Unwritten Seoul	South Korea	2025	Drama	 9.5	- / +12/12
+19	Silent	Japan	2022	Drama	 9.5	- / +11/11
+20	Still 17	South Korea	2018	Drama	 9.5	- / +32/32
+21	The Red Sleeve	South Korea	2021	Drama	 9.5	- / +17/17
+22	Twelve Letters	China	2025	Drama	 9.5	- / +12/12
+23	When I Fly Towards You	China	2023	Drama	 9.5	- / +24/24
+24	Couple on the Backtrack	South Korea	2017	Drama	 9.0	- / +12/12
+25	Descendants of the Sun	South Korea	2016	Drama	 9.0	- / +16/16
+26	Guardian: The Lonely and Great God	South Korea	2016	Drama	 9.0	- / +16/16
+27	Hi Bye, Mama!	South Korea	2020	Drama	 9.0	- / +16/16
+28	It's Okay, That's Love	South Korea	2014	Drama	 9.0	- / +16/16
+29	Kingdom	South Korea	2019	Drama	 9.0	- / +6/6
+30	Kingdom Season 2	South Korea	2020	Drama	 9.0	- / +6/6
+31	Love Like the Galaxy: Part 1	China	2022	Drama	 9.0	- / +27/27
+32	Love Like the Galaxy: Part 2	China	2022	Drama	 9.0	- / +29/29
+33	Love Scout	South Korea	2025	Drama	 9.0	- / +12/12
+34	Melo Movie	South Korea	2025	Drama	 9.0	- / +10/10
+35	Mr. Sunshine	South Korea	2018	Drama	 9.0	- / +24/24
+36	My Dearest	South Korea	2023	Drama	 9.0	- / +10/10
+37	New Life Begins	China	2022	Drama	 9.0	- / +40/40
+38	Parasite	South Korea	2019	Movie	 9.0	- / +1/1
+39	Queen of Tears	South Korea	2024	Drama	 9.0	- / +16/16
+40	Rain or Shine	South Korea	2017	Drama	 9.0	- / +16/16
+41	The Bad Kids	China	2020	Drama	 9.0	- / +12/12
+42	The Day of Becoming You	China	2021	Drama	 9.0	- / +26/26
+43	The Tale of Lady Ok	South Korea	2024	Drama	 9.0	- / +16/16
+44	Train to Busan	South Korea	2016	Movie	 9.0	- / +1/1
+45	Vincenzo	South Korea	2021	Drama	 9.0	- / +20/20
+46	Welcome to Samdal-ri	South Korea	2023	Drama	 9.0	- / +16/16
+47	While You Were Sleeping	South Korea	2017	Drama	 9.0	- / +32/32
+48	You Are My Hero	China	2021	Drama	 9.0	- / +40/40
+49	A Dream of Splendor	China	2022	Drama	 8.5	- / +40/40
+50	A Dream within a Dream	China	2025	Drama	 8.5	- / +40/40
+51	A Romance of the Little Forest	China	2022	Drama	 8.5	- / +35/35
+52	Amidst a Snowstorm of Love	China	2024	Drama	 8.5	- / +30/30
+53	An Ancient Love Song	China	2023	Drama	 8.5	- / +14/14
+54	Angel's Last Mission: Love	South Korea	2019	Drama	 8.5	- / +32/32
+55	Because This Is My First Life	South Korea	2017	Drama	 8.5	- / +16/16
+56	Begin Again	China	2020	Drama	 8.5	- / +35/35
+57	Business Proposal	South Korea	2022	Drama	 8.5	- / +12/12
+58	Crash Landing on You	South Korea	2019	Drama	 8.5	- / +16/16
+59	Dali & Cocky Prince	South Korea	2021	Drama	 8.5	- / +16/16
+60	Destined	China	2023	Drama	 8.5	- / +40/40
+61	Douluo Continent	China	2021	Drama	 8.5	- / +40/40
+62	Extraordinary You	South Korea	2019	Drama	 8.5	- / +32/32
+63	Forever and Ever	China	2021	Drama	 8.5	- / +30/30
+64	Forever Love	China	2020	Drama	 8.5	- / +28/28
+65	From Five to Nine	Japan	2015	Drama	 8.5	- / +10/10
+66	Hold My Hand at Twilight	Japan	2023	Drama	 8.5	- / +10/10
+67	Last Summer	South Korea	2025	Drama	 8.5	- / +12/12
+68	Le Coup de Foudre	China	2019	Drama	 8.5	- / +35/35
+69	Light beyond the Reed	China	2025	Drama	 8.5	- / +18/18
+70	Love between Fairy and Devil	China	2022	Drama	 8.5	- / +36/36
+71	Love between Lines	China	2026	Drama	 8.5	- / +28/28
+72	Love Is Sweet	China	2020	Drama	 8.5	- / +36/36
+73	Love Story in the 1970s	China	2026	Drama	 8.5	- / +29/29
+74	Mad for Each Other	South Korea	2021	Drama	 8.5	- / +13/13
+75	Moon Embracing the Sun	South Korea	2012	Drama	 8.5	- / +20/20
+76	My Heroic Husband	China	2021	Drama	 8.5	- / +36/36
+77	My Little Happiness	China	2021	Drama	 8.5	- / +28/28
+78	My Love from the Star	South Korea	2013	Drama	 8.5	- / +21/21
+79	My Roommate Is a Gumiho	South Korea	2021	Drama	 8.5	- / +16/16
+80	My Special One	Japan	2025	Movie	 8.5	- / +1/1
+81	Once upon a Small Town	South Korea	2022	Drama	 8.5	- / +12/12
+82	One and Only	China	2021	Drama	 8.5	- / +24/24
+83	Our Secret	China	2021	Drama	 8.5	- / +24/24
+84	Since I Met U	China	2022	Drama	 8.5	- / +16/16
+85	The Crowned Clown	South Korea	2019	Drama	 8.5	- / +16/16
+86	The First Frost	China	2025	Drama	 8.5	- / +32/32
+87	The Hymn of Death	South Korea	2018	Drama	 8.5	- / +6/6
+88	The Legend of the Blue Sea	South Korea	2016	Drama	 8.5	- / +20/20
+89	The Long Ballad	China	2021	Drama	 8.5	- / +49/49
+90	The Princess's Man	South Korea	2011	Drama	 8.5	- / +24/24
+91	The Prisoner of Beauty	China	2025	Drama	 8.5	- / +36/36
+92	Till the End of the Moon	China	2023	Drama	 8.5	- / +40/40
+93	Unforgettable Love	China	2021	Drama	 8.5	- / +24/24
+94	W	South Korea	2016	Drama	 8.5	- / +16/16
+95	Weightlifting Fairy Kim Bok Joo	South Korea	2016	Drama	 8.5	- / +16/16
+96	Why I Dress Up for Love	Japan	2021	Drama	 8.5	- / +10/10
+97	Will Love in Spring	China	2024	Drama	 8.5	- / +21/21
+98	You Are My Glory	China	2021	Drama	 8.5	- / +32/32
+99	You Are My Secret	China	2024	Drama	 8.5	- / +32/32
+100	Your Eyes Tell	Japan	2020	Movie	 8.5	- / +1/1
+101	Youth of May	South Korea	2021	Drama	 8.5	- / +12/12
+102	Are You the One	China	2024	Drama	 8.0	- / +40/40
+103	Be Passionately in Love	China	2025	Drama	 8.0	- / +24/24
+104	Jitenshaya-san no Takahashi-kun	Japan	2022	Drama	 8.0	- / +8/8
+105	Kill Me Love Me	China	2024	Drama	 8.0	- / +32/32
+106	King the Land	South Korea	2023	Drama	 8.0	- / +16/16
+107	Love in the Clouds	China	2025	Drama	 8.0	- / +36/36
+108	Love Next Door	South Korea	2024	Drama	 8.0	- / +16/16
+109	Love Your Enemy	South Korea	2024	Drama	 8.0	- / +12/12
+110	My Dearest Part 2	South Korea	2023	Drama	 8.0	- / +11/11
+111	My ID Is Gangnam Beauty	South Korea	2018	Drama	 8.0	- / +16/16
+112	My Journey to You	China	2023	Drama	 8.0	- / +24/24
+113	My Youth	South Korea	2025	Drama	 8.0	- / +12/12
+114	Onzoshi ni Koi wa Muzu Sugiru	Japan	2025	Drama	 8.0	- / +12/12
+115	Pursuit of Jade	China	2026	Drama	 8.0	- / +40/40
+116	Shine on Me	China	2025	Drama	 8.0	- / +36/36
+117	Sunshine of My Life	China	2021	Drama	 8.0	- / +45/45
+118	The Killer Is Also Romantic	China	2022	Drama	 8.0	- / +18/18
+119	The Practical Guide to Love	South Korea	2026	Drama	 8.0	- / +12/12
+120	The Smile Has Left Your Eyes	South Korea	2018	Drama	 8.0	- / +16/16
+121	True Beauty	South Korea	2020	Drama	 8.0	- / +16/16
+122	What's Wrong with Secretary Kim	South Korea	2018	Drama	 8.0	- / +16/16
+123	Wonderland of Love	China	2023	Drama	 8.0	- / +40/40
+124	A Girl & Three Sweethearts	Japan	2016	Drama	 7.5	- / +10/10
+125	Bloody Romance	China	2018	Drama	 7.5	- / +36/36
+126	Cursed in Love	Japan	2020	Drama	 7.5	- / +8/8
+127	General's Lady	China	2020	Drama	 7.5	- / +30/30
+128	Guardians of the Dafeng	China	2024	Drama	 7.5	- / +40/40
+129	Hidden Love	China	2023	Drama	 7.5	- / +25/25
+130	How Dare You!?	China	2026	Drama	 7.5	- / +32/32
+131	Intense Love	China	2020	Drama	 7.5	- / +24/24
+132	King Is Not Easy	China	2017	Drama	 7.5	- / +20/20
+133	Love Designer	China	2020	Drama	 7.5	- / +45/45
+134	Love Like White Jade	China	2021	Drama	 7.5	- / +32/32
+135	Love to Hate You	South Korea	2023	Drama	 7.5	- / +10/10
+136	Moon Lovers: Scarlet Heart Ryeo	South Korea	2016	Drama	 7.5	- / +20/20
+137	Welcome to Wedding Hell	South Korea	2022	Drama	 7.5	- / +12/12
+138	Moon in the Day	South Korea	2023	Drama	 7.0	- / +14/14
+139	My Sassy Girl	South Korea	2017	Drama	 7.0	- / +32/32
+140	Only for Love	China	2023	Drama	 7.0	- / +36/36
+141	Positively Yours	South Korea	2026	Drama	 7.0	- / +12/12
+142	Veil of Shadows	China	2026	Drama	 7.0	- / +29/29
+143	Back to Seventeen	China	2023	Drama	 6.5	- / +25/25
+144	Cute Programmer	China	2021	Drama	 6.5	- / +30/30
+145	Double Life	China	2024	Drama	 6.5	- / +27/27
+146	Love O2O	China	2016	Drama	 6.5	- / +30/30
+147	Sassy Beauty	China	2022	Drama	 6.5	- / +24/24
+148	The Blooms at Ruyi Pavilion	China	2020	Drama	 6.5	- / +40/40
+149	The Deliberations of Love	China	2023	Drama	 6.5	- / +24/24
+150	The Wolf Princess	China	2021	Drama	 6.5	- / +24/24
+151	Love under the Full Moon
+152	My Queen
+153	Rebirth for You
+154	The Queen of Attack
+155	My Handsome Roommate
+156	Ashes of Love
+157	A Girl Like Me

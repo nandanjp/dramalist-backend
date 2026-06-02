@@ -111,9 +111,27 @@ func (h *Handler) Import(c *gin.Context) {
 			continue
 		}
 
+		// Start with cast-list thumbnail as photo fallback
 		actorParams := dramadb.ActorParams{
-			Name:        cm.Name,
-			MDLPersonID: cm.PersonID,
+			Name:            cm.Name,
+			ProfileImageURL: strPtrIfNonEmpty(cm.PhotoURL),
+			MDLPersonID:     cm.PersonID,
+		}
+
+		// Fetch person page to get native name, nationality, biography, and a
+		// higher-quality profile image. Failures are non-fatal.
+		if cm.PersonSlug != "" {
+			if pd, pdErr := h.client.FetchPerson(ctx, cm.PersonSlug); pdErr == nil {
+				actorParams.NativeName = pd.NativeName
+				actorParams.Nationality = pd.Nationality
+				actorParams.Birthdate = pd.Birthdate
+				actorParams.Biography = pd.Biography
+				if pd.ProfileURL != nil && *pd.ProfileURL != "" {
+					actorParams.ProfileImageURL = pd.ProfileURL
+				}
+			} else {
+				slog.Warn("fetch person detail failed, using cast list data", "slug", cm.PersonSlug, "err", pdErr)
+			}
 		}
 
 		actorID, err := dramadb.UpsertActor(ctx, h.pool, actorParams)
@@ -122,9 +140,9 @@ func (h *Handler) Import(c *gin.Context) {
 			continue
 		}
 
-		// Mirror profile image only if actor doesn't already have one
-		if cm.PhotoURL != "" {
-			if mirrored := h.mirrorImage(ctx, cm.PhotoURL, "actor", actorID, "profile", userID); mirrored != "" {
+		// Mirror best available profile image (person page > cast thumbnail)
+		if actorParams.ProfileImageURL != nil && *actorParams.ProfileImageURL != "" {
+			if mirrored := h.mirrorImage(ctx, *actorParams.ProfileImageURL, "actor", actorID, "profile", userID); mirrored != "" {
 				if err := dramadb.UpdateActorProfileImage(ctx, h.pool, actorID, mirrored); err != nil {
 					slog.Warn("update actor profile image failed", "err", err)
 				}
