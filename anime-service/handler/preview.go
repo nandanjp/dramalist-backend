@@ -105,3 +105,5 @@ func strVal(s *string) string {
 	}
 	return *s
 }
+
+func strPtr(s string) *string { return &s }

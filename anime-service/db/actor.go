@@ -10,6 +10,7 @@ import (
 type ActorParams struct {
 	Name            string
 	NativeName      *string
+	Nationality     *string
 	Birthdate       *time.Time
 	ProfileImageURL *string
 	Biography       *string
@@ -22,15 +23,16 @@ type ActorParams struct {
 func UpsertActor(ctx context.Context, pool *pgxpool.Pool, p ActorParams) (string, error) {
 	var id string
 	err := pool.QueryRow(ctx, `
-		INSERT INTO actors (name, native_name, birthdate, profile_image_url, biography, anilist_person_id)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO actors (name, native_name, nationality, birthdate, profile_image_url, biography, anilist_person_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (anilist_person_id) DO UPDATE SET
 			name              = EXCLUDED.name,
 			native_name       = EXCLUDED.native_name,
+			nationality       = COALESCE(actors.nationality, EXCLUDED.nationality),
 			profile_image_url = EXCLUDED.profile_image_url,
 			biography         = EXCLUDED.biography
 		RETURNING id::text`,
-		p.Name, p.NativeName, p.Birthdate, p.ProfileImageURL, p.Biography, p.AnilistPersonID,
+		p.Name, p.NativeName, p.Nationality, p.Birthdate, p.ProfileImageURL, p.Biography, p.AnilistPersonID,
 	).Scan(&id)
 	if err == nil {
 		return id, nil

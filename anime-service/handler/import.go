@@ -100,6 +100,7 @@ func (h *Handler) Import(c *gin.Context) {
 			actorParams := animdb.ActorParams{
 				Name:            *va.Name.Full,
 				NativeName:      va.Name.Native,
+				Nationality:     strPtr("Japanese"),
 				Birthdate:       parseBirthdate(va.DateOfBirth),
 				ProfileImageURL: va.Image.Large,
 				Biography:       va.Description,
