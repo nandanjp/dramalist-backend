@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -12,6 +13,11 @@ import (
 type personImportRequest struct {
 	PersonID int    `json:"person_id" binding:"required"`
 	Slug     string `json:"slug"      binding:"required"`
+}
+
+type syncImageRequest struct {
+	ActorID     string `json:"actor_id"      binding:"required"`
+	MDLPersonID int    `json:"mdl_person_id" binding:"required"`
 }
 
 func (h *Handler) PersonPreview(c *gin.Context) {
@@ -94,5 +100,55 @@ func (h *Handler) PersonImport(c *gin.Context) {
 		"actor_id":      actorID,
 		"name":          person.Name,
 		"mdl_person_id": person.PersonID,
+	})
+}
+
+// SyncActorImage fetches the current MDL profile image for an existing actor,
+// mirrors it to MinIO, and updates profile_image_url.
+func (h *Handler) SyncActorImage(c *gin.Context) {
+	if c.GetHeader("X-User-Role") != "admin" {
+		errJSON(c, http.StatusForbidden, "admin only")
+		return
+	}
+
+	var req syncImageRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errJSON(c, http.StatusBadRequest, "actor_id and mdl_person_id are required")
+		return
+	}
+
+	ctx := c.Request.Context()
+	userID := c.GetHeader("X-User-Id")
+
+	// Fetch current profile image from MDL using just the numeric ID as slug;
+	// MDL redirects /people/{id} to the canonical slug URL.
+	slug := fmt.Sprintf("%d", req.MDLPersonID)
+	person, err := h.client.FetchPerson(ctx, slug)
+	if err != nil {
+		slog.Warn("SyncActorImage: FetchPerson failed", "mdl_person_id", req.MDLPersonID, "err", err)
+		errJSON(c, http.StatusBadGateway, "MDL fetch failed")
+		return
+	}
+
+	if person.ProfileURL == nil || *person.ProfileURL == "" {
+		errJSON(c, http.StatusUnprocessableEntity, "no profile image found on MDL")
+		return
+	}
+
+	mirrored := h.mirrorImage(ctx, *person.ProfileURL, "actor", req.ActorID, "profile", userID)
+	if mirrored == "" {
+		errJSON(c, http.StatusBadGateway, "image mirror failed")
+		return
+	}
+
+	if err := dramadb.UpdateActorProfileImage(ctx, h.pool, req.ActorID, mirrored); err != nil {
+		slog.Error("SyncActorImage: update profile image failed", "actor_id", req.ActorID, "err", err)
+		errJSON(c, http.StatusInternalServerError, "failed to update actor")
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"actor_id":          req.ActorID,
+		"profile_image_url": mirrored,
 	})
 }

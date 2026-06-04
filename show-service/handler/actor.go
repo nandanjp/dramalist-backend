@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 )
 
 const actorCacheTTL = 30 * time.Minute
+const actorListCacheTTL = 90 * time.Second
 const actorCacheVersion = "v3:" // bump when actorDetailResponse shape changes
 
 // ── Domain types ──────────────────────────────────────────────────────────────
@@ -68,21 +70,28 @@ type patchActorRequest struct {
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
-// SearchActors returns actors matching a name prefix, or all actors (up to 100) when q is empty.
-// Supports ?sort=name_asc|name_desc|created_at_desc|created_at_asc (default: name_asc).
-// Response is always {"actors": [...]}.
-// GET /actors?q=<name>&sort=<sort>
+// SearchActors returns a paginated, filtered list of actors.
+// Supports ?q=<name>&nationality=<nat>&sort=name_asc|name_desc|created_at_desc|created_at_asc&page=<n>&limit=<n>.
+// Response is {"actors": [...], "total": n, "page": n, "limit": n}.
+// GET /actors?q=<name>&nationality=<nat>&sort=<sort>&page=<page>&limit=<limit>
 func (h *Handler) SearchActors(c *gin.Context) {
 	q := strings.TrimSpace(c.Query("q"))
+	nationality := strings.TrimSpace(c.Query("nationality"))
 	ctx := c.Request.Context()
 
-	limit := 100
-	if l, err := strconv.Atoi(c.Query("limit")); err == nil && l > 0 && l <= 200 {
-		limit = l
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if page < 1 {
+		page = 1
 	}
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+	offset := (page - 1) * limit
 
+	sort := c.DefaultQuery("sort", "name_asc")
 	orderBy := "name ASC"
-	switch c.Query("sort") {
+	switch sort {
 	case "name_desc":
 		orderBy = "name DESC"
 	case "created_at_desc":
@@ -91,27 +100,55 @@ func (h *Handler) SearchActors(c *gin.Context) {
 		orderBy = "created_at ASC"
 	}
 
-	var rows interface {
-		Next() bool
-		Scan(...any) error
-		Close()
-		Err() error
+	// Check version-based cache
+	var cacheKey string
+	if h.rdb != nil {
+		ver, err := h.rdb.Get(ctx, actorCacheVersion+"actors:list:ver").Result()
+		if err != nil {
+			ver = "0"
+		}
+		cacheKey = fmt.Sprintf("%sactors:list:%s:q=%s:nat=%s:srt=%s:pg=%d:li=%d",
+			actorCacheVersion, ver, q, nationality, sort, page, limit)
+		if cached, err := h.rdb.Get(ctx, cacheKey).Result(); err == nil {
+			c.Data(http.StatusOK, "application/json", []byte(cached))
+			return
+		}
 	}
-	var err error
 
-	if q == "" {
-		rows, err = h.pool.Query(ctx,
-			`SELECT id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, mdl_person_id, created_at, updated_at
-			 FROM actors ORDER BY `+orderBy+` LIMIT $1`,
-			limit,
-		)
-	} else {
-		rows, err = h.pool.Query(ctx,
-			`SELECT id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, mdl_person_id, created_at, updated_at
-			 FROM actors WHERE lower(name) LIKE lower($1) ORDER BY `+orderBy+` LIMIT $2`,
-			q+"%", limit,
-		)
+	// Build dynamic WHERE clause
+	where := []string{"1=1"}
+	args := []any{}
+	idx := 1
+
+	if q != "" {
+		where = append(where, fmt.Sprintf("lower(name) LIKE lower($%d)", idx))
+		args = append(args, q+"%")
+		idx++
 	}
+	if nationality != "" {
+		where = append(where, fmt.Sprintf("lower(nationality) = lower($%d)", idx))
+		args = append(args, nationality)
+		idx++
+	}
+
+	whereClause := strings.Join(where, " AND ")
+
+	var total int
+	countArgs := append([]any{}, args...)
+	if err := h.pool.QueryRow(ctx,
+		"SELECT COUNT(*) FROM actors WHERE "+whereClause, countArgs...,
+	).Scan(&total); err != nil {
+		errJSON(c, http.StatusInternalServerError, "count failed")
+		return
+	}
+
+	args = append(args, limit, offset)
+	rows, err := h.pool.Query(ctx,
+		"SELECT id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, mdl_person_id, created_at, updated_at"+
+			" FROM actors WHERE "+whereClause+
+			fmt.Sprintf(" ORDER BY %s LIMIT $%d OFFSET $%d", orderBy, idx, idx+1),
+		args...,
+	)
 	if err != nil {
 		errJSON(c, http.StatusInternalServerError, "query failed")
 		return
@@ -127,7 +164,16 @@ func (h *Handler) SearchActors(c *gin.Context) {
 		}
 		actors = append(actors, a)
 	}
-	c.JSON(http.StatusOK, gin.H{"actors": actors})
+
+	resp := gin.H{"actors": actors, "total": total, "page": page, "limit": limit}
+	if h.rdb != nil && cacheKey != "" {
+		if b, err := json.Marshal(resp); err == nil {
+			h.rdb.Set(ctx, cacheKey, b, actorListCacheTTL)
+			c.Data(http.StatusOK, "application/json", b)
+			return
+		}
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetActorProfile returns a full actor profile with filmography.
@@ -236,6 +282,11 @@ func (h *Handler) CreateActor(c *gin.Context) {
 		errJSON(c, http.StatusInternalServerError, "insert failed")
 		return
 	}
+
+	if h.rdb != nil {
+		h.rdb.Incr(context.Background(), actorCacheVersion+"actors:list:ver")
+	}
+
 	c.JSON(http.StatusCreated, a)
 }
 
@@ -261,6 +312,7 @@ func (h *Handler) DeleteActor(c *gin.Context) {
 
 	if h.rdb != nil {
 		h.rdb.Del(context.Background(), actorCacheVersion+"actor:"+id)
+		h.rdb.Incr(context.Background(), actorCacheVersion+"actors:list:ver")
 	}
 
 	c.Status(http.StatusNoContent)
@@ -307,6 +359,7 @@ func (h *Handler) UpdateActor(c *gin.Context) {
 
 	if h.rdb != nil {
 		h.rdb.Del(context.Background(), actorCacheVersion+"actor:"+id)
+		h.rdb.Incr(context.Background(), actorCacheVersion+"actors:list:ver")
 	}
 
 	c.JSON(http.StatusOK, a)

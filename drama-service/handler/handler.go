@@ -26,6 +26,7 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 	r.GET("/drama/search", h.Search)
 	r.GET("/drama/person/:slug", h.PersonPreview)
 	r.POST("/drama/person/import", h.PersonImport)
+	r.POST("/drama/person/sync-image", h.SyncActorImage)
 	r.GET("/drama/:slug", h.Preview)
 	r.POST("/drama/import", h.Import)
 }

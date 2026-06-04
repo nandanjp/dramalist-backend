@@ -17,6 +17,7 @@ import (
 )
 
 const catalogDetailTTL = time.Hour
+const catalogListCacheTTL = 90 * time.Second
 const catalogCacheVersion = "v2:"
 
 // ── Domain types ──────────────────────────────────────────────────────────────
@@ -189,6 +190,26 @@ func (h *Handler) ListCatalog(c *gin.Context) {
 
 	whereClause := strings.Join(where, " AND ")
 
+	// Check version-based list cache
+	var listCacheKey string
+	if h.rdb != nil {
+		ver, err := h.rdb.Get(ctx, catalogCacheVersion+"catalog:list:ver").Result()
+		if err != nil {
+			ver = "0"
+		}
+		listCacheKey = fmt.Sprintf("%scatalog:list:%s:q=%s:mt=%s:as=%s:co=%s:la=%s:yf=%s:yt=%s:ge=%s:srt=%s:pg=%d:li=%d",
+			catalogCacheVersion, ver,
+			c.Query("q"), c.Query("media_type"), c.Query("airing_status"),
+			c.Query("country"), c.Query("language"),
+			c.Query("year_from"), c.Query("year_to"),
+			strings.Join(c.QueryArray("genre"), ","),
+			c.DefaultQuery("sort", "title_asc"), page, limit)
+		if cached, err := h.rdb.Get(ctx, listCacheKey).Result(); err == nil {
+			c.Data(http.StatusOK, "application/json", []byte(cached))
+			return
+		}
+	}
+
 	var total int
 	countArgs := append([]any{}, args...)
 	if err := h.pool.QueryRow(ctx,
@@ -220,12 +241,20 @@ func (h *Handler) ListCatalog(c *gin.Context) {
 		entries = append(entries, entry)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	resp := gin.H{
 		"entries": entries,
 		"total":   total,
 		"page":    page,
 		"limit":   limit,
-	})
+	}
+	if h.rdb != nil && listCacheKey != "" {
+		if b, err := json.Marshal(resp); err == nil {
+			h.rdb.Set(ctx, listCacheKey, b, catalogListCacheTTL)
+			c.Data(http.StatusOK, "application/json", b)
+			return
+		}
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // GetCatalogEntry returns a single catalog entry with its full cast.
@@ -289,7 +318,7 @@ func invalidateCatalogCache(h *Handler, id string) {
 	if h.rdb == nil {
 		return
 	}
-	h.rdb.Del(context.Background(), "catalog:"+id)
+	h.rdb.Del(context.Background(), catalogCacheVersion+"catalog:"+id)
 }
 
 // CreateCatalogEntry creates a new catalog entry. Admin only.
@@ -351,6 +380,9 @@ func (h *Handler) CreateCatalogEntry(c *gin.Context) {
 	})
 
 	h.invalidateDiscoverCache()
+	if h.rdb != nil {
+		h.rdb.Incr(context.Background(), catalogCacheVersion+"catalog:list:ver")
+	}
 	c.JSON(http.StatusCreated, entry)
 }
 
@@ -458,6 +490,9 @@ func (h *Handler) UpdateCatalogEntry(c *gin.Context) {
 
 	invalidateCatalogCache(h, id)
 	h.invalidateDiscoverCache()
+	if h.rdb != nil {
+		h.rdb.Incr(context.Background(), catalogCacheVersion+"catalog:list:ver")
+	}
 	c.JSON(http.StatusOK, entry)
 }
 
@@ -484,5 +519,8 @@ func (h *Handler) DeleteCatalogEntry(c *gin.Context) {
 
 	invalidateCatalogCache(h, id)
 	h.invalidateDiscoverCache()
+	if h.rdb != nil {
+		h.rdb.Incr(context.Background(), catalogCacheVersion+"catalog:list:ver")
+	}
 	c.Status(http.StatusNoContent)
 }
