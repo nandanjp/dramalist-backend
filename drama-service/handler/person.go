@@ -4,11 +4,21 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
 
 	"github.com/gin-gonic/gin"
 
 	dramadb "dramalist/drama-service/db"
 )
+
+// MDL serves size-variant images with a "_X" suffix (e.g. "abc_c.jpg" for
+// the cropped variant of "abcc.jpg"). The originals outlive the variants on
+// their CDN, so strip the underscore before retrying a 404.
+var reMDLSizeSuffix = regexp.MustCompile(`_([a-z])(\.[a-zA-Z]+)$`)
+
+func normalizeMDLImageURL(u string) string {
+	return reMDLSizeSuffix.ReplaceAllString(u, "$1$2")
+}
 
 type personImportRequest struct {
 	PersonID int    `json:"person_id" binding:"required"`
@@ -89,7 +99,14 @@ func (h *Handler) PersonImport(c *gin.Context) {
 
 	// Mirror profile image to MinIO and update the stored URL.
 	if person.ProfileURL != nil && *person.ProfileURL != "" {
-		if mirrored := h.mirrorImage(ctx, *person.ProfileURL, "actor", actorID, "profile", userID); mirrored != "" {
+		imgURL := *person.ProfileURL
+		mirrored := h.mirrorImage(ctx, imgURL, "actor", actorID, "profile", userID)
+		if mirrored == "" {
+			if normalized := normalizeMDLImageURL(imgURL); normalized != imgURL {
+				mirrored = h.mirrorImage(ctx, normalized, "actor", actorID, "profile", userID)
+			}
+		}
+		if mirrored != "" {
 			if err := dramadb.UpdateActorProfileImage(ctx, h.pool, actorID, mirrored); err != nil {
 				slog.Warn("update actor profile image failed", "err", err)
 			}
@@ -135,9 +152,16 @@ func (h *Handler) SyncActorImage(c *gin.Context) {
 		return
 	}
 
-	mirrored := h.mirrorImage(ctx, *person.ProfileURL, "actor", req.ActorID, "profile", userID)
+	imgURL := *person.ProfileURL
+	mirrored := h.mirrorImage(ctx, imgURL, "actor", req.ActorID, "profile", userID)
 	if mirrored == "" {
-		errJSON(c, http.StatusBadGateway, "image mirror failed")
+		if normalized := normalizeMDLImageURL(imgURL); normalized != imgURL {
+			slog.Info("SyncActorImage: retrying with normalized URL", "original", imgURL, "normalized", normalized)
+			mirrored = h.mirrorImage(ctx, normalized, "actor", req.ActorID, "profile", userID)
+		}
+	}
+	if mirrored == "" {
+		errJSON(c, http.StatusUnprocessableEntity, "profile image unavailable — it may have been removed from MDL's CDN")
 		return
 	}
 
