@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/redis/go-redis/v9"
 
 	"dramalist/drama-service/mdl"
 )
@@ -14,10 +15,11 @@ type Handler struct {
 	pool     *pgxpool.Pool
 	client   *mdl.Client
 	mediaURL string
+	rdb      *redis.Client
 }
 
-func New(pool *pgxpool.Pool, client *mdl.Client, mediaURL string) *Handler {
-	return &Handler{pool: pool, client: client, mediaURL: mediaURL}
+func New(pool *pgxpool.Pool, client *mdl.Client, mediaURL string, rdb *redis.Client) *Handler {
+	return &Handler{pool: pool, client: client, mediaURL: mediaURL, rdb: rdb}
 }
 
 func (h *Handler) RegisterRoutes(r *gin.Engine) {

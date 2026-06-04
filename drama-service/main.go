@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"dramalist/drama-service/cache"
 	"dramalist/drama-service/config"
 	"dramalist/drama-service/db"
 	"dramalist/drama-service/handler"
@@ -35,8 +36,16 @@ func main() {
 	}
 	defer pool.Close()
 
+	rdb, err := cache.Connect(ctx, cfg)
+	if err != nil {
+		slog.Warn("redis unavailable, cache invalidation disabled", "err", err)
+		rdb = nil
+	} else {
+		defer rdb.Close()
+	}
+
 	client := mdl.NewClient()
-	h := handler.New(pool, client, cfg.MediaServiceURL)
+	h := handler.New(pool, client, cfg.MediaServiceURL, rdb)
 
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 

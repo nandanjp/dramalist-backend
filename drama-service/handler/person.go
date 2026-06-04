@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -10,6 +11,18 @@ import (
 
 	dramadb "dramalist/drama-service/db"
 )
+
+// show-service cache key constants — must stay in sync with show-service/handler/actor.go.
+const showActorCacheVersion = "v3:"
+
+func (h *Handler) invalidateActorCache(actorID string) {
+	if h.rdb == nil {
+		return
+	}
+	bg := context.Background()
+	h.rdb.Del(bg, showActorCacheVersion+"actor:"+actorID)
+	h.rdb.Incr(bg, showActorCacheVersion+"actors:list:ver")
+}
 
 // MDL serves size-variant images with a "_X" suffix (e.g. "abc_c.jpg" for
 // the cropped variant of "abcc.jpg"). The originals outlive the variants on
@@ -109,6 +122,8 @@ func (h *Handler) PersonImport(c *gin.Context) {
 		if mirrored != "" {
 			if err := dramadb.UpdateActorProfileImage(ctx, h.pool, actorID, mirrored); err != nil {
 				slog.Warn("update actor profile image failed", "err", err)
+			} else {
+				h.invalidateActorCache(actorID)
 			}
 		}
 	}
@@ -170,6 +185,7 @@ func (h *Handler) SyncActorImage(c *gin.Context) {
 		errJSON(c, http.StatusInternalServerError, "failed to update actor")
 		return
 	}
+	h.invalidateActorCache(req.ActorID)
 
 	c.JSON(http.StatusOK, gin.H{
 		"actor_id":          req.ActorID,

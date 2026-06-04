@@ -13,6 +13,8 @@ type Config struct {
 	PostgresHost     string `env:"POSTGRES_HOST"     envDefault:"postgres"`
 	PostgresPort     int    `env:"POSTGRES_PORT"     envDefault:"5432"`
 	MediaServiceURL  string `env:"MEDIA_SERVICE_URL" envDefault:"http://media-service.dramalist.svc.cluster.local:3006"`
+	RedisHost        string `env:"REDIS_HOST"        envDefault:"redis"`
+	RedisPort        int    `env:"REDIS_PORT"        envDefault:"6379"`
 }
 
 func Load() (*Config, error) {
