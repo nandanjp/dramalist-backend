@@ -159,26 +159,52 @@ func (h *Handler) ListShowReviews(c *gin.Context) {
 	page, limit := parsePagination(c)
 	ctx := c.Request.Context()
 
-	// Own review always visible; other users' reviews only if is_public.
+	// When unauthenticated (no userID), only return public reviews.
+	// Including an empty string in a UUID comparison causes a PostgreSQL type error.
 	var total int64
-	if err := h.pool.QueryRow(ctx,
-		`SELECT COUNT(*) FROM reviews
-		 WHERE catalog_id = $1 AND (is_public = true OR user_id = $2)`,
-		catalogID, userID,
-	).Scan(&total); err != nil {
+	var countErr error
+	var rows pgx.Rows
+	var rowsErr error
+
+	if userID == "" {
+		countErr = h.pool.QueryRow(ctx,
+			`SELECT COUNT(*) FROM reviews WHERE catalog_id = $1 AND is_public = true`,
+			catalogID,
+		).Scan(&total)
+	} else {
+		countErr = h.pool.QueryRow(ctx,
+			`SELECT COUNT(*) FROM reviews
+			 WHERE catalog_id = $1 AND (is_public = true OR user_id = $2)`,
+			catalogID, userID,
+		).Scan(&total)
+	}
+	if countErr != nil {
 		errJSON(c, http.StatusInternalServerError, "query failed")
 		return
 	}
 
-	rows, err := h.pool.Query(ctx,
-		`SELECT id::text, catalog_id::text, catalog_title, user_id::text, rating, content,
-		        contains_spoilers, is_public, created_at, updated_at
-		 FROM reviews
-		 WHERE catalog_id = $1 AND (is_public = true OR user_id = $2)
-		 ORDER BY created_at DESC
-		 LIMIT $3 OFFSET $4`,
-		catalogID, userID, limit, (page-1)*limit,
-	)
+	if userID == "" {
+		rows, rowsErr = h.pool.Query(ctx,
+			`SELECT id::text, catalog_id::text, catalog_title, user_id::text, rating, content,
+			        contains_spoilers, is_public, created_at, updated_at
+			 FROM reviews
+			 WHERE catalog_id = $1 AND is_public = true
+			 ORDER BY created_at DESC
+			 LIMIT $2 OFFSET $3`,
+			catalogID, limit, (page-1)*limit,
+		)
+	} else {
+		rows, rowsErr = h.pool.Query(ctx,
+			`SELECT id::text, catalog_id::text, catalog_title, user_id::text, rating, content,
+			        contains_spoilers, is_public, created_at, updated_at
+			 FROM reviews
+			 WHERE catalog_id = $1 AND (is_public = true OR user_id = $2)
+			 ORDER BY created_at DESC
+			 LIMIT $3 OFFSET $4`,
+			catalogID, userID, limit, (page-1)*limit,
+		)
+	}
+	err := rowsErr
 	if err != nil {
 		errJSON(c, http.StatusInternalServerError, "query failed")
 		return
