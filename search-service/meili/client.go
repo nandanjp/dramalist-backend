@@ -67,7 +67,11 @@ type Client struct {
 }
 
 func New(cfg *config.Config) (*Client, error) {
-	c := meilisearch.New(cfg.MeilisearchURL)
+	opts := []meilisearch.Option{}
+	if cfg.MeilisearchAPIKey != "" {
+		opts = append(opts, meilisearch.WithAPIKey(cfg.MeilisearchAPIKey))
+	}
+	c := meilisearch.New(cfg.MeilisearchURL, opts...)
 	return &Client{
 		meili: c,
 		index: c.Index(indexUID),
