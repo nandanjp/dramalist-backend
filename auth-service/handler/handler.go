@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -110,17 +111,40 @@ func (h *Handler) issueTokenPair(ctx context.Context, user dbUser) (tokenPair, e
 }
 
 // setRefreshCookie writes the refresh token as an HttpOnly cookie.
+// The domain is derived from the request Origin so that local dev (localhost)
+// works even when the backend is deployed with a production CookieDomain.
 func (h *Handler) setRefreshCookie(c *gin.Context, refreshToken string) {
+	domain := h.cookieDomainFor(c)
+	secure := h.cfg.IsProduction() && domain != ""
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie(
 		"drl_refresh",
 		refreshToken,
 		h.cfg.RefreshTokenTTL,
 		"/",
-		h.cfg.CookieDomain,
-		h.cfg.IsProduction(), // Secure flag
-		true,                 // HttpOnly
+		domain,
+		secure,
+		true, // HttpOnly
 	)
+}
+
+// cookieDomainFor returns "" when the request originates from localhost so the
+// browser scopes the cookie to the exact host rather than a wildcard domain.
+func (h *Handler) cookieDomainFor(c *gin.Context) string {
+	origin := c.GetHeader("Origin")
+	if origin == "" {
+		origin = c.GetHeader("Referer")
+	}
+	if origin != "" {
+		u, err := url.Parse(origin)
+		if err == nil {
+			host := u.Hostname()
+			if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+				return ""
+			}
+		}
+	}
+	return h.cfg.CookieDomain
 }
 
 func errJSON(c *gin.Context, status int, msg string) {
