@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 )
 
 // RefreshToken exchanges a valid refresh token (from cookie or body) for a new
@@ -28,15 +29,15 @@ func (h *Handler) RefreshToken(c *gin.Context) {
 	// Validate against Redis (fast path)
 	userID, err := h.rdb.Get(ctx, "refresh:"+refreshToken).Result()
 	if err != nil {
-		errJSON(c, http.StatusUnauthorized, "invalid or expired refresh token")
+		if err == redis.Nil {
+			errJSON(c, http.StatusUnauthorized, "invalid or expired refresh token")
+		} else {
+			errJSON(c, http.StatusServiceUnavailable, "authentication service temporarily unavailable")
+		}
 		return
 	}
 
-	// Revoke old token (rotation — single-use enforcement)
-	h.rdb.Del(ctx, "refresh:"+refreshToken)
-	h.pool.Exec(ctx, "UPDATE refresh_tokens SET revoked = true WHERE token = $1", refreshToken)
-
-	// Load user
+	// Load user before rotating — if the user lookup fails we haven't touched anything yet
 	var user dbUser
 	if err := h.pool.QueryRow(ctx,
 		"SELECT id::text, email, display_name, totp_enabled, is_admin FROM users WHERE id = $1", userID,
@@ -45,11 +46,17 @@ func (h *Handler) RefreshToken(c *gin.Context) {
 		return
 	}
 
+	// Issue new token pair BEFORE revoking the old one so that any failure
+	// between the two steps leaves the user with a still-valid session.
 	pair, err := h.issueTokenPair(ctx, user)
 	if err != nil {
 		errJSON(c, http.StatusInternalServerError, "token issuance failed")
 		return
 	}
+
+	// Revoke old token after successful issuance (rotation — single-use enforcement)
+	h.rdb.Del(ctx, "refresh:"+refreshToken)
+	h.pool.Exec(ctx, "UPDATE refresh_tokens SET revoked = true WHERE token = $1", refreshToken)
 
 	h.setRefreshCookie(c, pair.RefreshToken)
 	c.JSON(http.StatusOK, gin.H{

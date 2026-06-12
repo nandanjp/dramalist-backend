@@ -111,6 +111,7 @@ func (h *Handler) issueTokenPair(ctx context.Context, user dbUser) (tokenPair, e
 
 // setRefreshCookie writes the refresh token as an HttpOnly cookie.
 func (h *Handler) setRefreshCookie(c *gin.Context, refreshToken string) {
+	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie(
 		"drl_refresh",
 		refreshToken,
