@@ -10,7 +10,7 @@ import (
 )
 
 type searchResponse struct {
-	Hits  []meili.SearchResult `json:"hits"`
+	Hits  []meili.SearchResult `json:"results"`
 	Total int64                  `json:"total"`
 	Page  int                    `json:"page"`
 	Limit int                    `json:"limit"`

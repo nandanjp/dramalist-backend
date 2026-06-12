@@ -186,10 +186,10 @@ func (h *Handler) ListEntries(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"items": entries,
-		"total": total,
-		"page":  page,
-		"limit": limit,
+		"entries": entries,
+		"total":   total,
+		"page":    page,
+		"limit":   limit,
 	})
 }
 
@@ -422,9 +422,9 @@ func (h *Handler) ListPublicEntries(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"items": entries,
-		"total": total,
-		"page":  page,
-		"limit": limit,
+		"entries": entries,
+		"total":   total,
+		"page":    page,
+		"limit":   limit,
 	})
 }
