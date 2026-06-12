@@ -78,6 +78,7 @@ func catalogRowToResponse(r db.CatalogRow) catalogResponse {
 		DurationMinutes: r.DurationMinutes,
 		Genre:           genre,
 		AiringStatus:    r.AiringStatus,
+		TMDBID:          r.TMDBID,
 		CreatedBy:       r.CreatedBy,
 		CreatedAt:       r.CreatedAt,
 		UpdatedAt:       r.UpdatedAt,

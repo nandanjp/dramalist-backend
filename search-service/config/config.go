@@ -8,10 +8,11 @@ import (
 
 type Config struct {
 	Port                  string `env:"PORT"                    envDefault:"3005"`
-	ElasticsearchURL      string `env:"ELASTICSEARCH_URL"       envDefault:"http://elasticsearch:9200"`
+	MeilisearchURL        string `env:"MEILISEARCH_URL"         envDefault:"http://meilisearch:7700"`
 	KafkaBootstrapServers string `env:"KAFKA_BOOTSTRAP_SERVERS" envDefault:"kafka:9092"`
 	KafkaGroupID          string `env:"KAFKA_GROUP_ID"          envDefault:"search-service"`
 	ShowServiceURL        string `env:"SHOW_SERVICE_URL"        envDefault:"http://show-service:3003"`
+	ReviewServiceURL      string `env:"REVIEW_SERVICE_URL"      envDefault:"http://review-service:3004"`
 }
 
 func Load() (*Config, error) {

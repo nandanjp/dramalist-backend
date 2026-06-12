@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -36,6 +37,47 @@ type mediaRecord struct {
 	LargeURL   string `json:"large_url"`
 	SizeBytes  *int64 `json:"size_bytes,omitempty"`
 	CreatedAt  time.Time `json:"created_at"`
+}
+
+// Presign generates a presigned PUT URL for direct client uploads to MinIO.
+// POST /media/presign — body: {"content_type": "image/jpeg"}
+func (h *Handler) Presign(c *gin.Context) {
+	userID := c.GetHeader("X-User-Id")
+	if userID == "" {
+		errJSON(c, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	var req struct {
+		ContentType string `json:"content_type"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.ContentType == "" {
+		req.ContentType = "image/jpeg"
+	}
+
+	ext := ".jpg"
+	switch req.ContentType {
+	case "image/png":
+		ext = ".png"
+	case "image/webp":
+		ext = ".webp"
+	}
+
+	key := fmt.Sprintf("%s/%s%s", userID, uuid.New().String(), ext)
+	expiry := 15 * time.Minute
+
+	presignedURL, err := h.store.PresignedPutURL(c.Request.Context(), "profiles", key, expiry)
+	if err != nil {
+		log.Printf("media presign: %v", err)
+		errJSON(c, http.StatusInternalServerError, "could not generate presigned URL")
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"presigned_url": presignedURL,
+		"key":           key,
+		"expires_at":    time.Now().Add(expiry).UTC().Format(time.RFC3339),
+	})
 }
 
 // Upload accepts a multipart image and stores three WebP variants (thumb/medium/large)

@@ -16,9 +16,10 @@ type Config struct {
 	PostgresHost     string `env:"POSTGRES_HOST" envDefault:"postgres"`
 	PostgresPort     int    `env:"POSTGRES_PORT" envDefault:"5432"`
 
-	MinioEndpoint  string `env:"MINIO_ENDPOINT" envDefault:"minio:9000"`
+	MinioEndpoint  string `env:"MINIO_ENDPOINT"   envDefault:"minio:9000"`
 	MinioAccessKey string `env:"MINIO_ACCESS_KEY" envDefault:"dramalist"`
 	MinioSecretKey string `env:"MINIO_SECRET_KEY,required"`
+	MinioPublicURL string `env:"MINIO_PUBLIC_URL" envDefault:"http://localhost:9000"`
 }
 
 func (c *Config) PostgresDSN() string {

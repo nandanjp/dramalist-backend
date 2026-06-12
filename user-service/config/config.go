@@ -20,7 +20,12 @@ type Config struct {
 	RedisPort int    `env:"REDIS_PORT" envDefault:"6379"`
 
 	KafkaBootstrapServers string `env:"KAFKA_BOOTSTRAP_SERVERS" envDefault:"kafka:9092"`
-	KafkaGroupID          string `env:"KAFKA_GROUP_ID" envDefault:"user-service"`
+	KafkaGroupID          string `env:"KAFKA_GROUP_ID"          envDefault:"user-service"`
+
+	JWTSecret          string `env:"JWT_SECRET"            envDefault:""`
+	ShowServiceURL     string `env:"SHOW_SERVICE_URL"      envDefault:"http://show-service.dramalist.svc.cluster.local:3003"`
+	MinioPublicURL     string `env:"MINIO_PUBLIC_URL"      envDefault:"http://localhost:9000"`
+	MinioProfileBucket string `env:"MINIO_PROFILE_BUCKET"  envDefault:"profiles"`
 }
 
 func (c *Config) PostgresDSN() string {

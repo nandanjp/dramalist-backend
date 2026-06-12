@@ -5,19 +5,18 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+
+	"dramalist/drama-service/tmdb"
 )
 
 type searchResult struct {
-	MDLID        int      `json:"mdl_id"`
-	Slug         string   `json:"slug"`
-	Title        string   `json:"title"`
-	OriginalTitle *string `json:"original_title,omitempty"`
-	PosterURL    *string  `json:"poster_url,omitempty"`
-	Year         *int     `json:"year,omitempty"`
-	Episodes     *int     `json:"episodes,omitempty"`
-	Type         string   `json:"type"`
-	Country      string   `json:"country"`
-	Rating       *float64 `json:"rating,omitempty"`
+	TMDBID        int      `json:"tmdb_id"`
+	Title         string   `json:"title"`
+	OriginalTitle string   `json:"original_title,omitempty"`
+	PosterURL     string   `json:"poster_url,omitempty"`
+	Year          *int     `json:"year,omitempty"`
+	Country       string   `json:"country,omitempty"`
+	VoteAverage   float64  `json:"vote_average,omitempty"`
 }
 
 func (h *Handler) Search(c *gin.Context) {
@@ -34,37 +33,38 @@ func (h *Handler) Search(c *gin.Context) {
 		}
 	}
 
-	limit := 20
-	if l := c.Query("limit"); l != "" {
-		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 50 {
-			limit = n
-		}
-	}
-
-	raw, hasMore, err := h.client.Search(c.Request.Context(), q, page, limit)
+	raw, totalPages, err := h.tmdb.SearchTV(c.Request.Context(), q, page)
 	if err != nil {
-		errJSON(c, http.StatusBadGateway, "MDL search failed")
+		errJSON(c, http.StatusBadGateway, "TMDB search failed")
 		return
 	}
 
 	results := make([]searchResult, 0, len(raw))
 	for _, r := range raw {
-		results = append(results, searchResult{
-			MDLID:     r.MDLID,
-			Slug:      r.Slug,
-			Title:     r.Title,
-			PosterURL: r.PosterURL,
-			Year:      r.Year,
-			Episodes:  r.EpisodeCount,
-			Type:      r.Type,
-			Country:   r.Country,
-			Rating:    r.Rating,
-		})
+		sr := searchResult{
+			TMDBID:       r.ID,
+			Title:        r.Name,
+			OriginalTitle: r.OriginalName,
+			VoteAverage:  r.VoteAverage,
+		}
+		if r.PosterPath != "" {
+			sr.PosterURL = h.tmdb.PosterURL(r.PosterPath)
+		}
+		if len(r.FirstAirDate) >= 4 {
+			if y, err := strconv.Atoi(r.FirstAirDate[:4]); err == nil {
+				sr.Year = &y
+			}
+		}
+		if len(r.OriginCountry) > 0 {
+			sr.Country = tmdb.OriginCountryName(r.OriginCountry[0])
+		}
+		results = append(results, sr)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"results":  results,
-		"page":     page,
-		"has_more": hasMore,
+		"results":     results,
+		"page":        page,
+		"total_pages": totalPages,
+		"has_more":    page < totalPages,
 	})
 }

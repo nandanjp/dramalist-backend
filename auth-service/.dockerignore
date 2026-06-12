@@ -1,0 +1,18 @@
+# local build artifact
+auth-service
+auth-service.exe
+
+# test artifacts
+*.test
+*.out
+coverage.html
+
+# secrets — never send to Docker daemon
+.env
+.env.*
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

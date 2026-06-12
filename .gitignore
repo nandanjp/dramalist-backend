@@ -7,6 +7,10 @@
 */review-service
 */search-service
 */ai-service
+*/drama-service
+*/media-service
+*/anime-service
+*/stub-server
 *.exe
 *.exe~
 *.dll

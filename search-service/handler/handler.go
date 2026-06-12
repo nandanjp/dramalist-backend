@@ -7,19 +7,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"dramalist/search-service/elastic"
+	"dramalist/search-service/meili"
 )
 
-// Searcher abstracts the Elasticsearch client for testability.
 type Searcher interface {
-	Search(ctx context.Context, p elastic.SearchParams) ([]elastic.SearchResult, int64, error)
+	Search(ctx context.Context, p meili.SearchParams) ([]meili.SearchResult, int64, error)
 }
 
 type Handler struct {
 	es Searcher
 }
 
-func New(es *elastic.Client) *Handler {
+func New(es *meili.Client) *Handler {
 	return &Handler{es: es}
 }
 
@@ -27,6 +26,11 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 	r.GET("/health", h.Health)
 
 	r.GET("/search", h.Search)
+	r.GET("/search/actors", h.SearchActors)
+}
+
+func (h *Handler) SearchActors(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"hits": []any{}, "total": 0})
 }
 
 func errJSON(c *gin.Context, status int, msg string) {

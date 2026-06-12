@@ -36,6 +36,7 @@ type catalogResponse struct {
 	DurationMinutes *int       `json:"duration_minutes"`
 	Genre           []string   `json:"genre"`
 	AiringStatus    string     `json:"airing_status"`
+	TMDBID          *int       `json:"tmdb_id,omitempty"`
 	CreatedBy       string     `json:"created_by"`
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
@@ -59,6 +60,7 @@ type createCatalogRequest struct {
 	DurationMinutes *int     `json:"duration_minutes"`
 	Genre           []string `json:"genre"`
 	AiringStatus    string   `json:"airing_status"`
+	TMDBID          *int     `json:"tmdb_id"`
 }
 
 type patchCatalogRequest struct {
@@ -95,7 +97,7 @@ var validCatalogSorts = map[string]string{
 
 const catalogSelectCols = `id::text, media_type, title, original_title, synopsis, poster_url,
     year, country, language, episode_count, duration_minutes, genre,
-    airing_status, created_by::text, created_at, updated_at`
+    airing_status, tmdb_id, created_by::text, created_at, updated_at`
 
 func scanCatalog(row interface {
 	Scan(...any) error
@@ -104,7 +106,7 @@ func scanCatalog(row interface {
 	err := row.Scan(
 		&c.ID, &c.MediaType, &c.Title, &c.OriginalTitle, &c.Synopsis, &c.PosterURL,
 		&c.Year, &c.Country, &c.Language, &c.EpisodeCount, &c.DurationMinutes, &c.Genre,
-		&c.AiringStatus, &c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
+		&c.AiringStatus, &c.TMDBID, &c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
 	)
 	if c.Genre == nil {
 		c.Genre = []string{}
@@ -182,6 +184,13 @@ func (h *Handler) ListCatalog(c *gin.Context) {
 		args = append(args, as)
 		idx++
 	}
+	if tmdbIDStr := c.Query("tmdb_id"); tmdbIDStr != "" {
+		if tmdbID, err := strconv.Atoi(tmdbIDStr); err == nil {
+			where = append(where, fmt.Sprintf("tmdb_id = $%d", idx))
+			args = append(args, tmdbID)
+			idx++
+		}
+	}
 
 	orderBy := validCatalogSorts[c.DefaultQuery("sort", "title_asc")]
 	if orderBy == "" {
@@ -242,10 +251,10 @@ func (h *Handler) ListCatalog(c *gin.Context) {
 	}
 
 	resp := gin.H{
-		"entries": entries,
-		"total":   total,
-		"page":    page,
-		"limit":   limit,
+		"items": entries,
+		"total": total,
+		"page":  page,
+		"limit": limit,
 	}
 	if h.rdb != nil && listCacheKey != "" {
 		if b, err := json.Marshal(resp); err == nil {
@@ -357,12 +366,12 @@ func (h *Handler) CreateCatalogEntry(c *gin.Context) {
 	entry, err := scanCatalog(h.pool.QueryRow(ctx,
 		`INSERT INTO catalog
 		 (media_type, title, original_title, synopsis, poster_url, year, country, language,
-		  episode_count, duration_minutes, genre, airing_status, created_by)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+		  episode_count, duration_minutes, genre, airing_status, tmdb_id, created_by)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 		 RETURNING `+catalogSelectCols,
 		req.MediaType, req.Title, req.OriginalTitle, req.Synopsis, req.PosterURL,
 		req.Year, req.Country, req.Language, req.EpisodeCount, req.DurationMinutes,
-		req.Genre, req.AiringStatus, userID,
+		req.Genre, req.AiringStatus, req.TMDBID, userID,
 	))
 	if err != nil {
 		errJSON(c, http.StatusInternalServerError, "insert failed")

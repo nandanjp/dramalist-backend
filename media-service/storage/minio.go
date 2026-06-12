@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/url"
+	"strings"
+	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -16,12 +19,14 @@ import (
 const MediaBucket = "dramalist-media"
 
 type Store struct {
-	client *minio.Client
+	client    *minio.Client
+	pubClient *minio.Client // for presigning with the public endpoint
 }
 
 // Connect creates a Store and ensures the media bucket exists.
 // endpoint is the internal MinIO address (e.g. "minio:9000").
-func Connect(endpoint, accessKey, secretKey string) (*Store, error) {
+// publicURL is the externally-reachable MinIO base URL (e.g. "http://localhost:9000").
+func Connect(endpoint, accessKey, secretKey, publicURL string) (*Store, error) {
 	client, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
 		Secure: false,
@@ -33,6 +38,29 @@ func Connect(endpoint, accessKey, secretKey string) (*Store, error) {
 	s := &Store{client: client}
 	if err := s.ensureBucket(context.Background()); err != nil {
 		return nil, fmt.Errorf("minio ensure bucket: %w", err)
+	}
+
+	// Build a separate client for presigning using the public URL so that
+	// presigned URLs point to the externally-reachable endpoint.
+	if publicURL != "" {
+		pub, pubErr := url.Parse(publicURL)
+		if pubErr == nil && pub.Host != "" {
+			pubEndpoint := pub.Host
+			secure := pub.Scheme == "https"
+			// Strip any explicit port 80/443 that minio.New doesn't expect.
+			pubEndpoint = strings.TrimSuffix(pubEndpoint, ":80")
+			pubClient, pubErr := minio.New(pubEndpoint, &minio.Options{
+				Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
+				Secure: secure,
+				Region: "us-east-1",
+			})
+			if pubErr == nil {
+				s.pubClient = pubClient
+			}
+		}
+	}
+	if s.pubClient == nil {
+		s.pubClient = client
 	}
 	return s, nil
 }
@@ -90,4 +118,14 @@ func (s *Store) GetObject(ctx context.Context, key string) (io.ReadCloser, strin
 // DeleteObject removes key from the media bucket.
 func (s *Store) DeleteObject(ctx context.Context, key string) error {
 	return s.client.RemoveObject(ctx, MediaBucket, key, minio.RemoveObjectOptions{})
+}
+
+// PresignedPutURL generates a presigned PUT URL for the given bucket and key.
+// The URL uses the public endpoint so it is accessible from outside the cluster.
+func (s *Store) PresignedPutURL(ctx context.Context, bucket, key string, expiry time.Duration) (string, error) {
+	u, err := s.pubClient.PresignedPutObject(ctx, bucket, key, expiry)
+	if err != nil {
+		return "", fmt.Errorf("presign put object: %w", err)
+	}
+	return u.String(), nil
 }

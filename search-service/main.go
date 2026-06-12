@@ -14,7 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"dramalist/search-service/config"
-	"dramalist/search-service/elastic"
+	"dramalist/search-service/meili"
 	"dramalist/search-service/handler"
 	kafkaconsumer "dramalist/search-service/kafka"
 	"dramalist/search-service/middleware"
@@ -27,9 +27,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	es, err := elastic.New(cfg)
+	es, err := meili.New(cfg)
 	if err != nil {
-		slog.Error("elasticsearch client failed", "err", err)
+		slog.Error("meilisearch client failed", "err", err)
 		os.Exit(1)
 	}
 
@@ -38,7 +38,7 @@ func main() {
 
 	for {
 		if err := es.EnsureIndex(ctx); err != nil {
-			slog.Warn("elasticsearch not ready, retrying", "err", err)
+			slog.Warn("meilisearch not ready, retrying", "err", err)
 			time.Sleep(3 * time.Second)
 			continue
 		}
@@ -48,7 +48,7 @@ func main() {
 	// If the index is empty (cold start or wiped volume), backfill from show-service.
 	count, err := es.CountDocuments(ctx)
 	if err != nil {
-		slog.Warn("could not count ES documents, skipping backfill", "err", err)
+		slog.Warn("could not count documents, skipping backfill", "err", err)
 	} else if count == 0 {
 		go backfill(ctx, es, cfg.ShowServiceURL)
 	}
@@ -56,6 +56,10 @@ func main() {
 	consumer := kafkaconsumer.NewConsumer(cfg, es)
 	defer consumer.Close()
 	go consumer.Run(ctx)
+
+	reviewConsumer := kafkaconsumer.NewReviewConsumer(cfg, es)
+	defer reviewConsumer.Close()
+	go reviewConsumer.Run(ctx)
 
 	h := handler.New(es)
 
@@ -100,7 +104,7 @@ func main() {
 
 // backfill fetches all catalog entries from show-service and indexes them into ES.
 // Runs in a background goroutine so the HTTP server starts immediately.
-func backfill(ctx context.Context, es *elastic.Client, showServiceURL string) {
+func backfill(ctx context.Context, es *meili.Client, showServiceURL string) {
 	slog.Info("starting ES backfill from show-service")
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, showServiceURL+"/internal/catalog/all", nil)
@@ -121,7 +125,7 @@ func backfill(ctx context.Context, es *elastic.Client, showServiceURL string) {
 		return
 	}
 
-	var entries []elastic.CatalogDoc
+	var entries []meili.CatalogDoc
 	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
 		slog.Error("backfill: decode failed", "err", err)
 		return
@@ -138,5 +142,5 @@ func backfill(ctx context.Context, es *elastic.Client, showServiceURL string) {
 		}
 		indexed++
 	}
-	slog.Info("ES backfill complete", "indexed", indexed, "total", len(entries))
+	slog.Info("backfill complete", "indexed", indexed, "total", len(entries))
 }

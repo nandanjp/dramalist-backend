@@ -57,6 +57,7 @@ func main() {
 	r.Use(gin.Recovery())
 	m := middleware.NewMetrics("user_service")
 	r.Use(m.Handler())
+	r.Use(middleware.JWTIdentity(cfg.JWTSecret))
 	r.Use(middleware.RequestLogger("user_service"))
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 

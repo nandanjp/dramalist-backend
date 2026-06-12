@@ -15,8 +15,8 @@ import (
 	"dramalist/drama-service/config"
 	"dramalist/drama-service/db"
 	"dramalist/drama-service/handler"
-	"dramalist/drama-service/mdl"
 	"dramalist/drama-service/middleware"
+	"dramalist/drama-service/tmdb"
 )
 
 func main() {
@@ -44,8 +44,8 @@ func main() {
 		defer rdb.Close()
 	}
 
-	client := mdl.NewClient()
-	h := handler.New(pool, client, cfg.MediaServiceURL, rdb)
+	tmdbClient := tmdb.New(cfg.TMDBBaseURL, cfg.TMDBImageBaseURL, cfg.TMDBAPIKey)
+	h := handler.New(pool, tmdbClient, cfg.MediaServiceURL, cfg.ShowServiceURL, rdb)
 
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 

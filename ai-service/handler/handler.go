@@ -20,7 +20,7 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 	r.GET("/health", h.Health)
 
 	ai := r.Group("/ai")
-	ai.POST("/recommendations", h.Recommendations)
+	ai.POST("/recommend", h.Recommend)
 	ai.POST("/mood-search", h.MoodSearch)
 	ai.POST("/shows/:showID/summary", h.Summary)
 }

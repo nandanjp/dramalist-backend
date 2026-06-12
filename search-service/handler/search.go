@@ -6,14 +6,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"dramalist/search-service/elastic"
+	"dramalist/search-service/meili"
 )
 
 type searchResponse struct {
-	Results []elastic.SearchResult `json:"results"`
-	Total   int64                  `json:"total"`
-	Page    int                    `json:"page"`
-	Limit   int                    `json:"limit"`
+	Hits  []meili.SearchResult `json:"hits"`
+	Total int64                  `json:"total"`
+	Page  int                    `json:"page"`
+	Limit int                    `json:"limit"`
 }
 
 func (h *Handler) Search(c *gin.Context) {
@@ -29,7 +29,7 @@ func (h *Handler) Search(c *gin.Context) {
 	yearFrom, _ := strconv.Atoi(c.Query("year_from"))
 	yearTo, _ := strconv.Atoi(c.Query("year_to"))
 
-	params := elastic.SearchParams{
+	params := meili.SearchParams{
 		Query:        c.Query("q"),
 		MediaType:    c.Query("media_type"),
 		Genre:        c.Query("genre"),
@@ -49,9 +49,9 @@ func (h *Handler) Search(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, searchResponse{
-		Results: results,
-		Total:   total,
-		Page:    page,
-		Limit:   limit,
+		Hits:  results,
+		Total: total,
+		Page:  page,
+		Limit: limit,
 	})
 }

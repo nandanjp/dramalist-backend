@@ -57,9 +57,18 @@ type chatResponse struct {
 	Message message `json:"message"`
 }
 
+// ChatText sends a system + user prompt and returns the model's free-form text response.
+func (c *Client) ChatText(ctx context.Context, system, user string) (string, error) {
+	return c.chat(ctx, system, user, "")
+}
+
 // Chat sends a system + user prompt and returns the model's response as a raw JSON string.
 // The format:"json" field in the Ollama request forces valid JSON output.
 func (c *Client) Chat(ctx context.Context, system, user string) (string, error) {
+	return c.chat(ctx, system, user, "json")
+}
+
+func (c *Client) chat(ctx context.Context, system, user, format string) (string, error) {
 	body := chatRequest{
 		Model: c.model,
 		Messages: []message{
@@ -67,7 +76,7 @@ func (c *Client) Chat(ctx context.Context, system, user string) (string, error) 
 			{Role: "user", Content: user},
 		},
 		Stream: false,
-		Format: "json",
+		Format: format,
 	}
 
 	payload, err := json.Marshal(body)

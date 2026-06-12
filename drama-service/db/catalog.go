@@ -20,13 +20,13 @@ type CatalogInsertParams struct {
 	EpisodeCount    *int
 	DurationMinutes *int
 	Genre           []string
-	MDLID           int
+	TMDBID          int
 }
 
-func CheckMDLExists(ctx context.Context, pool *pgxpool.Pool, mdlID int) (bool, error) {
+func CheckTMDBExists(ctx context.Context, pool *pgxpool.Pool, tmdbID int) (bool, error) {
 	var exists bool
 	err := pool.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM catalog WHERE mdl_id = $1)`, mdlID,
+		`SELECT EXISTS(SELECT 1 FROM catalog WHERE tmdb_id = $1)`, tmdbID,
 	).Scan(&exists)
 	return exists, err
 }
@@ -37,13 +37,13 @@ func InsertCatalog(ctx context.Context, pool *pgxpool.Pool, p CatalogInsertParam
 		INSERT INTO catalog
 		  (media_type, title, original_title, synopsis, poster_url,
 		   year, country, language, episode_count, duration_minutes,
-		   genre, airing_status, mdl_id, created_by)
+		   genre, airing_status, tmdb_id, created_by)
 		VALUES
 		  ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 		RETURNING id::text`,
 		p.MediaType, p.Title, p.OriginalTitle, p.Synopsis, p.PosterURL,
 		p.Year, p.Country, p.Language, p.EpisodeCount, p.DurationMinutes,
-		p.Genre, p.AiringStatus, p.MDLID, p.CreatedBy,
+		p.Genre, p.AiringStatus, p.TMDBID, p.CreatedBy,
 	).Scan(&id)
 	return id, err
 }

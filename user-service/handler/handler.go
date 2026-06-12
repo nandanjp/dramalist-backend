@@ -25,9 +25,11 @@ func (h *Handler) Register(r *gin.Engine) {
 	users := r.Group("/users")
 	users.GET("/me", h.GetMe)
 	users.PATCH("/me", h.PatchMe)
+	users.PATCH("/me/avatar", h.PatchMeAvatar)
 	users.GET("/me/stats", h.GetMyStats)
 	users.GET("/admin/list", h.AdminListUsers) // registered before /:slug wildcard
-	users.GET("/:slug", h.GetBySlug)
+	users.GET("/:id/stats", h.GetStatsByID)
+	users.GET("/:id", h.GetBySlug)
 }
 
 func errJSON(c *gin.Context, status int, msg string) {

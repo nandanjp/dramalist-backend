@@ -206,7 +206,7 @@ func (h *Handler) GetMyStats(c *gin.Context) {
 // ── GET /users/:slug ──────────────────────────────────────────────────────────
 
 func (h *Handler) GetBySlug(c *gin.Context) {
-	slug := c.Param("slug")
+	slug := c.Param("id")
 	ctx := c.Request.Context()
 
 	// Cache-aside for public profile by slug.
@@ -306,6 +306,66 @@ func (h *Handler) AdminListUsers(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, adminUserListResponse{Users: users, Total: total})
+}
+
+// ── PATCH /users/me/avatar ────────────────────────────────────────────────────
+
+func (h *Handler) PatchMeAvatar(c *gin.Context) {
+	userID := c.GetHeader("X-User-Id")
+	if userID == "" {
+		errJSON(c, http.StatusUnauthorized, "missing user identity")
+		return
+	}
+
+	var req struct {
+		Key string `json:"key" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Key == "" {
+		errJSON(c, http.StatusBadRequest, "key is required")
+		return
+	}
+
+	profileImageURL := h.cfg.MinioPublicURL + "/" + h.cfg.MinioProfileBucket + "/" + req.Key
+
+	ctx := c.Request.Context()
+	patch := db.ProfilePatch{AvatarURL: &profileImageURL}
+	if err := h.store.UpdateProfile(ctx, userID, patch); err != nil {
+		errJSON(c, http.StatusInternalServerError, "avatar update failed")
+		return
+	}
+
+	if h.rdb != nil {
+		h.rdb.Del(ctx, "profile:"+userID)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"profile_image_url": profileImageURL})
+}
+
+// ── GET /users/:id/stats ──────────────────────────────────────────────────────
+
+func (h *Handler) GetStatsByID(c *gin.Context) {
+	targetUserID := c.Param("id")
+	ctx := c.Request.Context()
+
+	var total int
+	if h.cfg.ShowServiceURL != "" {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+			h.cfg.ShowServiceURL+"/list?limit=1", nil)
+		if err == nil {
+			req.Header.Set("X-User-Id", targetUserID)
+			resp, err := http.DefaultClient.Do(req)
+			if err == nil {
+				defer resp.Body.Close()
+				var listResp struct {
+					Total int `json:"total"`
+				}
+				json.NewDecoder(resp.Body).Decode(&listResp)
+				total = listResp.Total
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"total": total})
 }
 
 // ── Shared helpers ────────────────────────────────────────────────────────────

@@ -69,7 +69,7 @@ func (h *Handler) Logout(c *gin.Context) {
 			"UPDATE refresh_tokens SET revoked = true WHERE token = $1", refreshToken)
 	}
 	c.SetCookie("drl_refresh", "", -1, "/", h.cfg.CookieDomain, h.cfg.IsProduction(), true)
-	c.JSON(http.StatusOK, gin.H{"message": "logged out"})
+	c.Status(http.StatusNoContent)
 }
 
 // LogoutAll revokes every non-expired refresh token for the authenticated user,

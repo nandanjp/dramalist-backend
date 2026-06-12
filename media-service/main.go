@@ -33,7 +33,7 @@ func main() {
 	}
 	defer pool.Close()
 
-	store, err := storage.Connect(cfg.MinioEndpoint, cfg.MinioAccessKey, cfg.MinioSecretKey)
+	store, err := storage.Connect(cfg.MinioEndpoint, cfg.MinioAccessKey, cfg.MinioSecretKey, cfg.MinioPublicURL)
 	if err != nil {
 		slog.Error("minio unavailable", "err", err)
 		os.Exit(1)

@@ -23,6 +23,7 @@ func (h *Handler) Register(r *gin.Engine) {
 	r.GET("/health", h.Health)
 
 	media := r.Group("/media")
+	media.POST("/presign", h.Presign)
 	media.POST("/upload", h.Upload)
 	media.GET("/file/:id", h.ServeFile)
 	media.GET("/entity/:entityType/:entityID", h.ListByEntity)

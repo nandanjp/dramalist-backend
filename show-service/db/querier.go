@@ -21,6 +21,7 @@ type CatalogRow struct {
 	DurationMinutes *int
 	Genre           []string
 	AiringStatus    string
+	TMDBID          *int
 	CreatedBy       string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time

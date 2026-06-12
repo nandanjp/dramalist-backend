@@ -10,7 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"dramalist/search-service/elastic"
+	"dramalist/search-service/meili"
 )
 
 func init() {
@@ -20,12 +20,12 @@ func init() {
 // ── Mock searcher ─────────────────────────────────────────────────────────────
 
 type mockSearcher struct {
-	results []elastic.SearchResult
+	results []meili.SearchResult
 	total   int64
 	err     error
 }
 
-func (m *mockSearcher) Search(_ context.Context, _ elastic.SearchParams) ([]elastic.SearchResult, int64, error) {
+func (m *mockSearcher) Search(_ context.Context, _ meili.SearchParams) ([]meili.SearchResult, int64, error) {
 	return m.results, m.total, m.err
 }
 
@@ -39,7 +39,7 @@ func newSearchRouter(s Searcher) *gin.Engine {
 }
 
 func TestSearch_EmptyQuery(t *testing.T) {
-	r := newSearchRouter(&mockSearcher{results: []elastic.SearchResult{}, total: 0})
+	r := newSearchRouter(&mockSearcher{results: []meili.SearchResult{}, total: 0})
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodGet, "/search?q=", nil)
@@ -53,8 +53,8 @@ func TestSearch_EmptyQuery(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
-	if resp.Total != 0 || len(resp.Results) != 0 {
-		t.Fatalf("expected empty results, got total=%d results=%d", resp.Total, len(resp.Results))
+	if resp.Total != 0 || len(resp.Hits) != 0 {
+		t.Fatalf("expected empty results, got total=%d results=%d", resp.Total, len(resp.Hits))
 	}
 }
 
@@ -71,7 +71,7 @@ func TestSearch_StoreError(t *testing.T) {
 }
 
 func TestSearch_WithResults(t *testing.T) {
-	results := []elastic.SearchResult{
+	results := []meili.SearchResult{
 		{CatalogID: "1", Title: "Goblin", MediaType: "drama"},
 		{CatalogID: "2", Title: "Goblin 2", MediaType: "drama"},
 	}
@@ -92,7 +92,7 @@ func TestSearch_WithResults(t *testing.T) {
 	if resp.Total != 2 {
 		t.Fatalf("expected total 2, got %d", resp.Total)
 	}
-	if len(resp.Results) != 2 {
-		t.Fatalf("expected 2 results, got %d", len(resp.Results))
+	if len(resp.Hits) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(resp.Hits))
 	}
 }

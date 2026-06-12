@@ -8,28 +8,29 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 
-	"dramalist/drama-service/mdl"
+	"dramalist/drama-service/tmdb"
 )
 
 type Handler struct {
 	pool     *pgxpool.Pool
-	client   *mdl.Client
+	tmdb     *tmdb.Client
 	mediaURL string
+	showURL  string
 	rdb      *redis.Client
 }
 
-func New(pool *pgxpool.Pool, client *mdl.Client, mediaURL string, rdb *redis.Client) *Handler {
-	return &Handler{pool: pool, client: client, mediaURL: mediaURL, rdb: rdb}
+func New(pool *pgxpool.Pool, tmdbClient *tmdb.Client, mediaURL, showURL string, rdb *redis.Client) *Handler {
+	return &Handler{pool: pool, tmdb: tmdbClient, mediaURL: mediaURL, showURL: showURL, rdb: rdb}
 }
 
 func (h *Handler) RegisterRoutes(r *gin.Engine) {
 	r.GET("/health", h.Health)
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	r.GET("/drama/search", h.Search)
-	r.GET("/drama/person/:slug", h.PersonPreview)
+	r.GET("/drama/person/:id", h.PersonPreview)
 	r.POST("/drama/person/import", h.PersonImport)
 	r.POST("/drama/person/sync-image", h.SyncActorImage)
-	r.GET("/drama/:slug", h.Preview)
+	r.GET("/drama/:id", h.Preview)
 	r.POST("/drama/import", h.Import)
 }
 

@@ -3,7 +3,6 @@ module dramalist/drama-service
 go 1.25.0
 
 require (
-	github.com/PuerkitoBio/goquery v1.10.3
 	github.com/caarlos0/env/v11 v11.4.1
 	github.com/gin-gonic/gin v1.12.0
 	github.com/jackc/pgx/v5 v5.9.2
@@ -12,7 +11,6 @@ require (
 )
 
 require (
-	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.15.0 // indirect

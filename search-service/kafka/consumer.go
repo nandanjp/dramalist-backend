@@ -10,7 +10,7 @@ import (
 	kafkago "github.com/segmentio/kafka-go"
 
 	"dramalist/search-service/config"
-	"dramalist/search-service/elastic"
+	"dramalist/search-service/meili"
 )
 
 type CatalogEvent struct {
@@ -30,10 +30,10 @@ type CatalogEvent struct {
 
 type Consumer struct {
 	reader *kafkago.Reader
-	es     *elastic.Client
+	es     *meili.Client
 }
 
-func NewConsumer(cfg *config.Config, es *elastic.Client) *Consumer {
+func NewConsumer(cfg *config.Config, es *meili.Client) *Consumer {
 	brokers := strings.Split(cfg.KafkaBootstrapServers, ",")
 	r := kafkago.NewReader(kafkago.ReaderConfig{
 		Brokers:        brokers,
@@ -81,7 +81,7 @@ func (c *Consumer) Run(ctx context.Context) {
 }
 
 func (c *Consumer) handleUpsert(ctx context.Context, evt CatalogEvent) {
-	doc := elastic.CatalogDoc{
+	doc := meili.CatalogDoc{
 		CatalogID:    evt.CatalogID,
 		MediaType:    evt.MediaType,
 		Title:        evt.Title,
@@ -110,7 +110,7 @@ func (c *Consumer) handleUpsert(ctx context.Context, evt CatalogEvent) {
 	}
 
 	if err := c.es.IndexCatalog(ctx, doc); err != nil {
-		slog.Error("elasticsearch index failed", "catalog_id", evt.CatalogID, "err", err)
+		slog.Error("meilisearch index failed", "catalog_id", evt.CatalogID, "err", err)
 		return
 	}
 	slog.Info("catalog indexed", "catalog_id", evt.CatalogID, "event", evt.Event)
@@ -118,7 +118,7 @@ func (c *Consumer) handleUpsert(ctx context.Context, evt CatalogEvent) {
 
 func (c *Consumer) handleDelete(ctx context.Context, evt CatalogEvent) {
 	if err := c.es.DeleteCatalog(ctx, evt.CatalogID); err != nil {
-		slog.Error("elasticsearch delete failed", "catalog_id", evt.CatalogID, "err", err)
+		slog.Error("meilisearch delete failed", "catalog_id", evt.CatalogID, "err", err)
 		return
 	}
 	slog.Info("catalog deleted from index", "catalog_id", evt.CatalogID)

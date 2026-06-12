@@ -9,7 +9,7 @@ import (
 
 const catalogSelectCols = `id::text, media_type, title, original_title, synopsis, poster_url,
     year, country, language, episode_count, duration_minutes, genre,
-    airing_status, created_by::text, created_at, updated_at`
+    airing_status, tmdb_id, created_by::text, created_at, updated_at`
 
 // PostgresQuerier implements Querier using a pgxpool.Pool.
 type PostgresQuerier struct {
@@ -36,7 +36,7 @@ func (q *PostgresQuerier) DiscoverCatalog(ctx context.Context, orderBy string, l
 		if err := rows.Scan(
 			&c.ID, &c.MediaType, &c.Title, &c.OriginalTitle, &c.Synopsis, &c.PosterURL,
 			&c.Year, &c.Country, &c.Language, &c.EpisodeCount, &c.DurationMinutes, &c.Genre,
-			&c.AiringStatus, &c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
+			&c.AiringStatus, &c.TMDBID, &c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -55,7 +55,7 @@ func (q *PostgresQuerier) GetCatalogDetail(ctx context.Context, id string) (*Cat
 	).Scan(
 		&detail.ID, &detail.MediaType, &detail.Title, &detail.OriginalTitle, &detail.Synopsis, &detail.PosterURL,
 		&detail.Year, &detail.Country, &detail.Language, &detail.EpisodeCount, &detail.DurationMinutes, &detail.Genre,
-		&detail.AiringStatus, &detail.CreatedBy, &detail.CreatedAt, &detail.UpdatedAt,
+		&detail.AiringStatus, &detail.TMDBID, &detail.CreatedBy, &detail.CreatedAt, &detail.UpdatedAt,
 	)
 	if err == pgx.ErrNoRows {
 		return nil, nil
