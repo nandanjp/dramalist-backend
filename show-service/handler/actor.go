@@ -27,7 +27,7 @@ type actorResponse struct {
 	Nationality     *string   `json:"nationality"`
 	Biography       *string   `json:"biography"`
 	ProfileImageURL *string   `json:"profile_image_url"`
-	MDLPersonID     *int      `json:"mdl_person_id"`
+	TMDBPersonID    *int      `json:"tmdb_person_id"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }
@@ -144,7 +144,7 @@ func (h *Handler) SearchActors(c *gin.Context) {
 
 	args = append(args, limit, offset)
 	rows, err := h.pool.Query(ctx,
-		"SELECT id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, mdl_person_id, created_at, updated_at"+
+		"SELECT id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, tmdb_person_id, created_at, updated_at"+
 			" FROM actors WHERE "+whereClause+
 			fmt.Sprintf(" ORDER BY %s LIMIT $%d OFFSET $%d", orderBy, idx, idx+1),
 		args...,
@@ -158,7 +158,7 @@ func (h *Handler) SearchActors(c *gin.Context) {
 	actors := make([]actorResponse, 0)
 	for rows.Next() {
 		var a actorResponse
-		if err := rows.Scan(&a.ID, &a.Name, &a.NativeName, &a.Birthdate, &a.Nationality, &a.Biography, &a.ProfileImageURL, &a.MDLPersonID, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.NativeName, &a.Birthdate, &a.Nationality, &a.Biography, &a.ProfileImageURL, &a.TMDBPersonID, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			errJSON(c, http.StatusInternalServerError, "scan failed")
 			return
 		}
@@ -228,7 +228,7 @@ func (h *Handler) GetActorProfile(c *gin.Context) {
 			Nationality:     row.Nationality,
 			Biography:       row.Biography,
 			ProfileImageURL: row.ProfileImageURL,
-			MDLPersonID:     row.MDLPersonID,
+			TMDBPersonID:     row.TMDBPersonID,
 			CreatedAt:       row.CreatedAt,
 			UpdatedAt:       row.UpdatedAt,
 		},
@@ -275,9 +275,9 @@ func (h *Handler) CreateActor(c *gin.Context) {
 		       biography = COALESCE(EXCLUDED.biography, actors.biography),
 		       profile_image_url = COALESCE(EXCLUDED.profile_image_url, actors.profile_image_url),
 		       updated_at = NOW()
-		 RETURNING id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, mdl_person_id, created_at, updated_at`,
+		 RETURNING id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, tmdb_person_id, created_at, updated_at`,
 		req.Name, req.NativeName, req.Birthdate, req.Nationality, req.Biography, req.ProfileImageURL,
-	).Scan(&a.ID, &a.Name, &a.NativeName, &a.Birthdate, &a.Nationality, &a.Biography, &a.ProfileImageURL, &a.MDLPersonID, &a.CreatedAt, &a.UpdatedAt)
+	).Scan(&a.ID, &a.Name, &a.NativeName, &a.Birthdate, &a.Nationality, &a.Biography, &a.ProfileImageURL, &a.TMDBPersonID, &a.CreatedAt, &a.UpdatedAt)
 	if err != nil {
 		errJSON(c, http.StatusInternalServerError, "insert failed")
 		return
@@ -345,9 +345,9 @@ func (h *Handler) UpdateActor(c *gin.Context) {
 		     profile_image_url = COALESCE($6, profile_image_url),
 		     updated_at       = NOW()
 		 WHERE id = $7
-		 RETURNING id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, mdl_person_id, created_at, updated_at`,
+		 RETURNING id::text, name, native_name, birthdate::text, nationality, biography, profile_image_url, tmdb_person_id, created_at, updated_at`,
 		req.Name, req.NativeName, req.Birthdate, req.Nationality, req.Biography, req.ProfileImageURL, id,
-	).Scan(&a.ID, &a.Name, &a.NativeName, &a.Birthdate, &a.Nationality, &a.Biography, &a.ProfileImageURL, &a.MDLPersonID, &a.CreatedAt, &a.UpdatedAt)
+	).Scan(&a.ID, &a.Name, &a.NativeName, &a.Birthdate, &a.Nationality, &a.Biography, &a.ProfileImageURL, &a.TMDBPersonID, &a.CreatedAt, &a.UpdatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			errJSON(c, http.StatusNotFound, "actor not found")
