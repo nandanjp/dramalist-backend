@@ -18,7 +18,7 @@ import (
 
 const catalogDetailTTL = time.Hour
 const catalogListCacheTTL = 90 * time.Second
-const catalogCacheVersion = "v2:"
+const catalogCacheVersion = "v3:"
 
 // ── Domain types ──────────────────────────────────────────────────────────────
 
@@ -251,10 +251,10 @@ func (h *Handler) ListCatalog(c *gin.Context) {
 	}
 
 	resp := gin.H{
-		"items": entries,
-		"total": total,
-		"page":  page,
-		"limit": limit,
+		"entries": entries,
+		"total":   total,
+		"page":    page,
+		"limit":   limit,
 	}
 	if h.rdb != nil && listCacheKey != "" {
 		if b, err := json.Marshal(resp); err == nil {
